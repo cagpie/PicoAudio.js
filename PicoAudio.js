@@ -1,7 +1,7 @@
 var PicoAudio = (function(){
-	function PicoAudio(){
+	function PicoAudio(_audioContext){
 		var AudioContext = window.AudioContext || window.webkitAudioContext;
-		this.context = new AudioContext();
+		this.context = _audioContext ? _audioContext : new AudioContext();
 		this.settings = {
 			globalVolume: 0.2,
 			tempo: 120,//
@@ -11,9 +11,10 @@ var PicoAudio = (function(){
 			hashBuffer: 1,
 			isWebMIDI: false,
 			WebMIDIPortOutputs: null,
-			WebMIDIPort: 0
+			WebMIDIPort: 0,
+			loop: false
 		};
-		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ console.log("end") } };
+		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ /*console.log("end")*/ } };
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
 		this.hashedDataList = [];
 		this.channels = [];
@@ -126,7 +127,7 @@ var PicoAudio = (function(){
 			case 119:
 			{
 				gainNode.gain.value = 0;
-				oscillator.stop();
+				oscillator.stop(0);
 			}
 			default:{
 				//gainNode.gain.setValueAtTime(note.velocity, note.start);
@@ -152,7 +153,7 @@ var PicoAudio = (function(){
 */
 		return function(){ 
 			try {
-				oscillator.stop()
+				oscillator.stop(0)
 			} catch(e) {
 			}
 		};
@@ -217,7 +218,7 @@ var PicoAudio = (function(){
 			case 44:
 				source.playbackRate.value = 1.5;
 				source.stop(start+0.02);
-				oscillator.stop();
+				oscillator.stop(0);
 				break;
 			// Open Hihat
 			case 46:
@@ -225,7 +226,7 @@ var PicoAudio = (function(){
 				source.stop(start+0.3);
 				gainNode.gain.setValueAtTime(velocity*0.9, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.3);
-				oscillator.stop();
+				oscillator.stop(0);
 				break;
 			// Cymbal
 			case 49: case 51: case 52:
@@ -234,7 +235,7 @@ var PicoAudio = (function(){
 				source.stop(start+0.5);
 				gainNode.gain.setValueAtTime(velocity*1, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.5);
-				oscillator.stop();
+				oscillator.stop(0);
 				break;
 			// Cymbal2
 			case 51:
@@ -242,7 +243,7 @@ var PicoAudio = (function(){
 				source.stop(start+0.4);
 				gainNode.gain.setValueAtTime(velocity*0.8, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.4);
-				oscillator.stop();
+				oscillator.stop(0);
 				break;
 			// Cymbal3
 			 case 59:
@@ -250,7 +251,7 @@ var PicoAudio = (function(){
 				source.stop(start+0.3);
 				gainNode.gain.setValueAtTime(velocity*0.5, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.3);
-				oscillator.stop();
+				oscillator.stop(0);
 				break;
 			// Bongo
 			case 60: case 61:
@@ -331,12 +332,12 @@ var PicoAudio = (function(){
 			default:
 				source.playbackRate.value = option.pitch/69*2;
 				source.stop(start+0.05);
-				oscillator.stop();
+				oscillator.stop(0);
 		}
 		return function(){
 			try{
-				source.stop();
-				oscillator.stop();
+				source.stop(0);
+				oscillator.stop(0);
 			} catch(e) {
 			}
 		};
@@ -405,26 +406,28 @@ var PicoAudio = (function(){
 			oscillator: oscillator,
 			panNode: panNode,
 			gainNode: gainNode
-		}
-	}
+		};
+	};
 
 	PicoAudio.prototype.startWebMIDI = function(){
 		var outputs;
 		navigator.requestMIDIAccess()
-			.then(midiAccess => {
-				outputs = midiAccess.outputs;
-				this.settings.WebMIDIPortOutputs = outputs;
-				return outputs;
+			.then(//midiAccess => { // 古いブラウザではエラーとなるためコメントアウト
+				function(midiAccess){
+					outputs = midiAccess.outputs;
+					this.settings.WebMIDIPortOutputs = outputs;
+					return outputs;
 			})
-			.catch(err => {
-				console.log(err);
+			.catch(//err => { // 古いブラウザではエラーとなるためコメントアウト
+				function(err){
+					console.log(err);
 			});
-	}
+	};
 
 	PicoAudio.prototype.initStatus = function(){
 		this.stop();
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
-	}
+	};
 
 	PicoAudio.prototype.stop = function(){
 		var states = this.states;
@@ -442,7 +445,7 @@ var PicoAudio = (function(){
 				}
 			}
 		}
-	}
+	};
 
 	PicoAudio.prototype.play = function(){
 		var context = this.context;
@@ -454,6 +457,27 @@ var PicoAudio = (function(){
 		states.isPlaying = true;
 		states.startTime = !states.startTime && !states.stopTime ? this.context.currentTime : (states.startTime + this.context.currentTime - states.stopTime);
 		states.stopFuncs = [];
+		// 曲終了コールバックを予約
+		var reserveFunc = function(){
+			console.log((new Date()).getTime());
+			if (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime <= 0) {
+				// 予定の時間以降に曲終了
+				that.onSongEnd();
+			} else {
+				// 処理落ちしたりしてまだ演奏中の場合、1ms後に曲終了コールバックを呼び出すよう予約
+				var reserveAgain = setTimeout(reserveFunc, 1);
+				pushFunc({
+					rootTimeout: reserveAgain,
+					stopFunc: function(){ clearTimeout(reserveAgain); }
+				});
+			}
+		};
+		var reserveTime = (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime) * 1000;
+		var reserve = setTimeout(reserveFunc, reserveTime);
+		pushFunc({
+			rootTimeout: reserve,
+			stopFunc: function(){ clearTimeout(reserve); }
+		});
 		(function playHash(idx){
 			states.playIndex = idx;
 			if(hashedDataList && hashedDataList[idx]){
@@ -473,12 +497,12 @@ var PicoAudio = (function(){
 							}, that.getTime(note.stop - note.start) * 1000);
 							pushFunc({
 								timeout: noteOff,
-								stopFunc: function(){ clearTimeout(noteOff) }
+								stopFunc: function(){ clearTimeout(noteOff); }
 							});
 						}, (that.getTime(note.start) - context.currentTime + states.startTime) * 1000);
 						pushFunc({
 							timeout: noteOn,
-							stopFunc: function(){ clearTimeout(noteOn) }
+							stopFunc: function(){ clearTimeout(noteOn); }
 						});
 					});
 				} else {
@@ -498,7 +522,7 @@ var PicoAudio = (function(){
 					}, settings.hashLength);
 					pushFunc({
 						rootTimeout: reserve,
-						stopFunc: function(){ clearTimeout(reserve) }
+						stopFunc: function(){ clearTimeout(reserve); }
 					});
 				}
 			} else {
@@ -518,7 +542,7 @@ var PicoAudio = (function(){
 				}
 			});
 		}
-	}
+	};
 
 	PicoAudio.prototype.setData = function(data){
 		if(this.states.isPlaying) this.stop();
@@ -549,7 +573,27 @@ var PicoAudio = (function(){
 		this.hashedDataList = hashedDataList;
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
 		return this;
-	}
+	};
+
+	PicoAudio.prototype.setGlobalVolume = function(volume){
+		this.settings.globalVolume = volume;
+	};
+
+	PicoAudio.prototype.setLoop = function(loop){
+		this.settings.loop = loop;
+	};
+
+	PicoAudio.prototype.setStartTime = function(offset){
+		this.states.startTime -= offset;
+		this.states.playIndex = Math.floor(offset * 1000 / this.settings.hashLength);
+	};
+
+	PicoAudio.prototype.onSongEnd = function(){
+		if (this.settings.loop){
+			this.initStatus();
+			this.play();
+		}
+	};
 
 	PicoAudio.prototype.getTime = function(timing){
 		var time = 0;
@@ -565,7 +609,7 @@ var PicoAudio = (function(){
 		});
 		time += (60 / tempo / that.settings.resolution) * (timing - currentTiming);
 		return time;
-	}
+	};
 
 	PicoAudio.prototype.getTiming = function(time){
 		var totalTime = 0;
@@ -576,17 +620,18 @@ var PicoAudio = (function(){
 			totalTime += (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
 			if(totalTime > time){
 				totalTime -= (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
-				currentTiming += (time - totalTime) / (60 / tempo / that.settings.resolution)
+				currentTiming += (time - totalTime) / (60 / tempo / that.settings.resolution);
 				return true;
 			}
 			currentTiming = tempoObj.timing;
 			tempo = tempoObj.value;
 		});
 		return currentTiming;
-	}
+	};
 
 	PicoAudio.prototype.parseSMF = function(smf){
-		if(smf.subarray(0, 4).join() != "77,84,104,100")
+		//if(smf.subarray(0, 4).join() != "77,84,104,100") // 古いブラウザではエラーとなるためコメントアウト
+		if(smf[0] != 77 || smf[1] != 84 || smf[2] != 104 || smf[3] != 100)
 			return "Not Sandard MIDI File.";
 		var data = new Object;
 		var p = 4;
@@ -603,7 +648,8 @@ var PicoAudio = (function(){
 		var songLength = 0;
 		if(this.settings.isWebMIDI) var messages = [];
 		for(var t=0; t<header.trackcount; t++){
-			if(smf.subarray(p, p+4).join() != "77,84,114,107")
+			//if(smf.subarray(p, p+4).join() != "77,84,114,107") // 古いブラウザではエラーとなるためコメントアウト
+			if(smf[p] != 77 || smf[p+1] != 84 || smf[p+2] != 114 || smf[p+3] != 107)
 				return "Irregular SMF.";
 			p += 4;
 			var track = new Object();
@@ -685,7 +731,7 @@ var PicoAudio = (function(){
 							case 6:
 								// RLSB=0 & RMSB=0 -> 6はピッチ
 								if(RpnLsb==0 && RpnMsb==0){
-									dataEntry = smf[p+2]
+									dataEntry = smf[p+2];
 								}
 								break;
 							case 7:
@@ -794,7 +840,7 @@ var PicoAudio = (function(){
 										break;
 									// Tempo
 									case 0x51:
-										data.tempo = 60*1000000/(smf[p+3]*0xffff + smf[p+4]*0xff + smf[p+5])
+										data.tempo = 60*1000000/(smf[p+3]*0xffff + smf[p+4]*0xff + smf[p+5]);
 										tempoTrack.push({
 											timing: time,
 											value: 60*1000000/(smf[p+3]*0xffff + smf[p+4]*0xff + smf[p+5])
@@ -807,7 +853,7 @@ var PicoAudio = (function(){
 										beatTrack.push({
 											timing: time,
 											value: [smf[p+3], Math.pow(2, smf[p+4])]
-										})
+										});
 										break;
 									case 0x59:
 									case 0x7F:
