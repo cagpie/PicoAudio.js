@@ -153,7 +153,7 @@ var PicoAudio = (function(){
 */
 		return function(){ 
 			try {
-				oscillator.stop(0)
+				oscillator.stop(0);
 			} catch(e) {
 			}
 		};
@@ -575,8 +575,16 @@ var PicoAudio = (function(){
 		return this;
 	};
 
+	PicoAudio.prototype.getGlobalVolume = function(){
+		return this.settings.globalVolume;
+	};
+
 	PicoAudio.prototype.setGlobalVolume = function(volume){
 		this.settings.globalVolume = volume;
+	};
+
+	PicoAudio.prototype.isLoop = function(){
+		return this.settings.loop;
 	};
 
 	PicoAudio.prototype.setLoop = function(loop){
