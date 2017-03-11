@@ -155,6 +155,12 @@ var PicoAudio = (function(){
 			try {
 				oscillator.stop(0);
 			} catch(e) {
+				try {
+					oscillator.disconnect();
+					gainNode.disconnect();
+					gainNode.gain.cancelScheduledValues(0);
+				} catch(e) {
+				}
 			}
 		};
 	};
@@ -339,6 +345,15 @@ var PicoAudio = (function(){
 				source.stop(0);
 				oscillator.stop(0);
 			} catch(e) {
+				try {
+					source.disconnect();
+					oscillator.disconnect();
+					gainNode.disconnect();
+					gainNode2.disconnect();
+					gainNode.gain.cancelScheduledValues(0);
+					gainNode2.gain.cancelScheduledValues(0);
+				} catch(e) {
+				}
 			}
 		};
 	};
@@ -459,7 +474,6 @@ var PicoAudio = (function(){
 		states.stopFuncs = [];
 		// 曲終了コールバックを予約
 		var reserveFunc = function(){
-			console.log((new Date()).getTime());
 			if (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime <= 0) {
 				// 予定の時間以降に曲終了
 				that.onSongEnd();
