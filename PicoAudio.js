@@ -88,7 +88,8 @@ var PicoAudio = (function(){
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+0.2);
-				oscillator.stop(note.start+0.5);
+				//oscillator.stop(note.start+0.5);
+				stopAudioNode(oscillator, note.start+0.5);
 				break;
 			}
 			// ピアノ程度に伸ばす系
@@ -127,7 +128,7 @@ var PicoAudio = (function(){
 			case 119:
 			{
 				gainNode.gain.value = 0;
-				stopAudioNode(oscillator, 0);//oscillator.stop(0);
+				stopAudioNode(oscillator, 0);
 			}
 			default:{
 				//gainNode.gain.setValueAtTime(note.velocity, note.start);
