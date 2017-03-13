@@ -4,7 +4,7 @@ var PicoAudio = (function(){
 		this.context = _audioContext ? _audioContext : new AudioContext();
 		this.settings = {
 			globalVolume: 0.2,
-			tempo: 120,//
+			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
 			hashLength: 1000,
@@ -462,15 +462,14 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.startWebMIDI = function(){
 		var outputs;
+		var that = this;
 		navigator.requestMIDIAccess()
-			.then(//midiAccess => { // 古いブラウザではエラーとなるためコメントアウト
-				function(midiAccess){
+			.then(function(midiAccess){
 					outputs = midiAccess.outputs;
-					this.settings.WebMIDIPortOutputs = outputs;
+					that.settings.WebMIDIPortOutputs = outputs;
 					return outputs;
 			})
-			.catch(//err => { // 古いブラウザではエラーとなるためコメントアウト
-				function(err){
+			.catch(function(err){
 					console.log(err);
 			});
 	};
@@ -478,6 +477,15 @@ var PicoAudio = (function(){
 	PicoAudio.prototype.initStatus = function(){
 		this.stop();
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
+		if(this.settings.isWebMIDI){
+			for(var t=0; t<16; t++){
+				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xE0+t, 0, 64]);
+				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 6, 0]);
+				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 7, 100]);
+				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 10, 64]);
+				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 11, 127]);
+			}
+		}
 	};
 
 	PicoAudio.prototype.stop = function(){
@@ -621,7 +629,7 @@ var PicoAudio = (function(){
 			});
 		}
 		this.hashedDataList = hashedDataList;
-		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
+		this.initStatus();
 		return this;
 	};
 
@@ -688,7 +696,6 @@ var PicoAudio = (function(){
 	};
 
 	PicoAudio.prototype.parseSMF = function(smf){
-		//if(smf.subarray(0, 4).join() != "77,84,104,100") // 古いブラウザではエラーとなるためコメントアウト
 		if(smf[0] != 77 || smf[1] != 84 || smf[2] != 104 || smf[3] != 100)
 			return "Not Sandard MIDI File.";
 		var data = new Object;
@@ -706,7 +713,6 @@ var PicoAudio = (function(){
 		var songLength = 0;
 		if(this.settings.isWebMIDI) var messages = [];
 		for(var t=0; t<header.trackcount; t++){
-			//if(smf.subarray(p, p+4).join() != "77,84,114,107") // 古いブラウザではエラーとなるためコメントアウト
 			if(smf[p] != 77 || smf[p+1] != 84 || smf[p+2] != 114 || smf[p+3] != 107)
 				return "Irregular SMF.";
 			p += 4;
