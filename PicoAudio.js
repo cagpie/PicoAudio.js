@@ -127,7 +127,7 @@ var PicoAudio = (function(){
 			case 119:
 			{
 				gainNode.gain.value = 0;
-				oscillator.stop(0);
+				stopAudioNode(oscillator, 0);//oscillator.stop(0);
 			}
 			default:{
 				//gainNode.gain.setValueAtTime(note.velocity, note.start);
@@ -151,11 +151,23 @@ var PicoAudio = (function(){
 		var wavtable = this.context.createPeriodicWave(real, imag);
 		oscillator.setPeriodicWave(wavtable);
 */
-		return function(){ 
-			try {
-				oscillator.stop(0);
+		function stopAudioNode(tar, time){
+			try{
+				tar.stop(time);
 			} catch(e) {
+				try {
+					tar.disconnect();
+					stopGainNode(gainNode);
+				} catch(e) {}
 			}
+		}
+		function stopGainNode(tar){
+			tar.disconnect();
+			tar.gain.cancelScheduledValues(0);
+		}
+		return function(){
+			stopAudioNode(oscillator, 0);
+			stopGainNode(gainNode);
 		};
 	};
 
@@ -332,14 +344,26 @@ var PicoAudio = (function(){
 			default:
 				source.playbackRate.value = option.pitch/69*2;
 				source.stop(start+0.05);
-				oscillator.stop(0);
+				stopAudioNode(oscillator, 0);
+		}
+		function stopAudioNode(tar, time){
+			try{
+				tar.stop(time);
+			} catch(e) {
+				try {
+					tar.disconnect();
+				} catch(e) {}
+			}
+		}
+		function stopGainNode(tar){
+			tar.disconnect();
+			tar.gain.cancelScheduledValues(0);
 		}
 		return function(){
-			try{
-				source.stop(0);
-				oscillator.stop(0);
-			} catch(e) {
-			}
+			stopAudioNode(source, 0);
+			stopAudioNode(oscillator, 0);
+			stopGainNode(gainNode);
+			stopGainNode(gainNode2);
 		};
 	};
 
@@ -353,10 +377,22 @@ var PicoAudio = (function(){
 		var channel = nonChannel ? 0 : (option.channel || 0);
 		var velocity = (option.velocity || 0.1) * Number(nonChannel ? 1 : (this.channels[channel][2] || 1)) * settings.globalVolume;
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
-		var panNode = context.createStereoPanner ? context.createStereoPanner() : { pan: { setValueAtTime: function(){} } };
+		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
+				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var gainNode = context.createGain();
 		var that = this;
-		panNode.pan.value = option.pan ? (option.pan[0].value / 127) * 2 - 1 : 0;
+		
+		if(!context.createStereoPanner && context.createPanner) {
+			var panValue = option.pan ? (option.pan[0].value / 127) * 2 - 1 : 0;
+			var panAngle = panValue * 90;
+			var panX = Math.sin(panAngle * (Math.PI / 180));
+			var panZ = -Math.cos(panAngle * (Math.PI / 180));
+			panNode.panningModel = "equalpower";
+			panNode.setPosition(panX, 0, panZ);
+		} else {
+			panNode.pan.value = option.pan ? (option.pan[0].value / 127) * 2 - 1 : 0;
+		}
+		
 		gainNode.gain.value = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
 		if(channel!=9){
 			oscillator.type = option.type || "sine";
@@ -380,13 +416,28 @@ var PicoAudio = (function(){
 				);
 			}) : false;
 		}
-		if(context.createStereoPanner){
-			option.pan ? option.pan.forEach(function(p){
-				panNode.pan.setValueAtTime(
-					(p.value / 127) * 2 - 1,
-					that.getTime(p.timing) + songStartTime
-				);
-			}) : false;
+		if(context.createStereoPanner || context.createPanner){
+			if(context.createStereoPanner) {
+				option.pan ? option.pan.forEach(function(p){
+					panNode.pan.setValueAtTime(
+						(p.value / 127) * 2 - 1,
+						that.getTime(p.timing) + songStartTime
+					);
+				}) : false;
+			} else if(context.createPanner){
+				if(panNode.positionX) {
+					option.pan ? option.pan.forEach(function(p){
+						var v = (p.value / 127) * 2 - 1;
+						var a = v * 90;
+						var x = Math.sin(a * (Math.PI / 180));
+						var z = -Math.cos(a * (Math.PI / 180));
+						panNode.positionX.setValueAtTime(x, that.getTime(p.timing) + songStartTime);
+						panNode.positionY.setValueAtTime(0, that.getTime(p.timing) + songStartTime);
+						panNode.positionZ.setValueAtTime(z, that.getTime(p.timing) + songStartTime);
+						panNode.setPosition(panX, 0, panZ);
+					}) : false;
+				}
+			}
 			oscillator.connect(panNode);
 			panNode.connect(gainNode);
 			gainNode.connect(context.destination);
@@ -459,7 +510,6 @@ var PicoAudio = (function(){
 		states.stopFuncs = [];
 		// 曲終了コールバックを予約
 		var reserveFunc = function(){
-			console.log((new Date()).getTime());
 			if (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime <= 0) {
 				// 予定の時間以降に曲終了
 				that.onSongEnd();
