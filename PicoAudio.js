@@ -736,14 +736,10 @@ var PicoAudio = (function(){
 			while(p<endPoint){
 				// DeltaTime
 				if(lastState!=null){
-					var dt = 0;
-					while(smf[p]>=0x80){
-						dt = (dt<<7) + (smf[p]-0x80);
-						p++;
-					}
-					dt = (dt<<7) + smf[p];
+					var lengthAry = variableLengthToInt(smf.subarray(p, p+4));
+					var dt = lengthAry[0];
 					time += dt;
-					p++;
+					p += lengthAry[1];
 				}
 				// WebMIDIAPI
 				if(this.settings.isWebMIDI) var cashP = p;
@@ -860,15 +856,15 @@ var PicoAudio = (function(){
 						});
 						p+=3;
 						break;
-					// Meta Events - F[ch], ...
+					// SysEx Events or Meta Events - F[ch], ...
 					case 0xF:{
 						//lastState = smf[p]; <- ランニングナントカは無いらしい
 						switch(smf[p]){
 							case 0xF0:
-								while(smf[p+1]!=0xF7){
-									p++;
-								}
-								p+=2;
+							case 0xF7:
+								// SysEx Events
+								var lengthAry = variableLengthToInt(smf.subarray(p+1, p+1+4));
+								p+=1+lengthAry[1]+lengthAry[0];
 								break;
 							case 0xF1:
 								p+=2;
@@ -880,7 +876,6 @@ var PicoAudio = (function(){
 								p+=2;
 								break;
 							case 0xF6:
-							case 0xF7:
 							case 0xF8:
 							case 0xFA:
 							case 0xFB:
@@ -889,6 +884,7 @@ var PicoAudio = (function(){
 								p+=1;
 								break;
 							case 0xFF:{
+								// Meta Events
 								switch(smf[p+1]){
 									case 0x00:
 									case 0x01:
@@ -924,17 +920,19 @@ var PicoAudio = (function(){
 									case 0x7F:
 										break;
 								}
-								p+=smf[p+2]+3;
+								var lengthAry = variableLengthToInt(smf.subarray(p+2, p+2+4));
+								p+=2+lengthAry[1]+lengthAry[0];
 								break;
 							}
 						}
 						break;
 					}
 					default: {
+						if(lastState == null)
+							return "Irregular SMF.";
 						p--;
 						smf[p] = lastState;
 						lastState = null;
-
 					}
 				}
 				// WebMIDIAPI
@@ -960,6 +958,18 @@ var PicoAudio = (function(){
 			value = (value << 8) + arr[i];
 		}
 		return value;
+	}
+
+	function variableLengthToInt(arr) {
+		var i = 0;
+		var value = 0;
+		while(i<arr.length-1 && arr[i]>=0x80){
+			value = (value<<7) + (arr[i]-0x80);
+			i++;
+		}
+		value = (value<<7) + arr[i];
+		i++;
+		return [value, i];
 	}
 
 	return PicoAudio;
