@@ -611,10 +611,9 @@ var PicoAudio = (function(){
 		var that = this;
 		var hashedDataList = [];
 		if(!this.settings.isWebMIDI){
-			data.tracks.forEach(function(track){
-				track.notes.forEach(function(note){
+			data.channels.forEach(function(channel){
+				channel.notes.forEach(function(note){
 					var option = note;
-					option.instrument = track.instrument;
 					var time = that.getTime(note.start) * (1000/that.settings.hashLength);
 					if(!hashedDataList[Math.floor(time)])
 						hashedDataList[Math.floor(time)] = [];
@@ -711,6 +710,13 @@ var PicoAudio = (function(){
 		var tracks = new Array();
 		var tempoTrack = new Array();
 		var beatTrack = new Array();
+		var channels = new Array();
+		for(var i=0; i<16; i++){
+			var channel = new Object();
+			channels.push(channel);
+			channel.messages = [];
+			channel.notes = [];
+		}
 		var songLength = 0;
 		if(this.settings.isWebMIDI) var messages = [];
 		for(var t=0; t<header.trackcount; t++){
@@ -722,17 +728,9 @@ var PicoAudio = (function(){
 			track.size = getInt(smf.subarray(p, p+4));
 			p += 4;
 			track.notes = [];
-			track.instrument = null;
 			var endPoint = p+track.size;
 			var time = 0;
-			var dataEntry = 2;
-			var pitchBend = 0;
-			var pan = 64;
-			var expression = 127;
-			var velocity = 100;
 			var lastState = 1;
-			var RpnLsb = -1;
-			var RpnMsb = -1;
 			while(p<endPoint){
 				// DeltaTime
 				if(lastState!=null){
@@ -745,116 +743,22 @@ var PicoAudio = (function(){
 				if(this.settings.isWebMIDI) var cashP = p;
 				// Events
 				switch(Math.floor(smf[p]/0x10)){
-					// Note OFF - 8[ch], Pitch, Velocity
-					case 0x8:
+					case 0x8: // Note OFF - 8[ch], Pitch, Velocity
+					case 0x9: // Note ON - 9[ch], Pitch, Velocity
+					case 0xA: // Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
+					case 0xB: // Control Change - B[ch],,
+					case 0xE: // PitchBend Change - E[ch],,
 						lastState = smf[p];
-						track.notes.some(function(note){
-							if(note.pitch==smf[p+1] && note.stop==null){
-								note.stop = time;
-								return true;
-							}
-						});
+						// チャンネル毎に仕分けた後に解析する
+						channels[lastState&0x0F].messages.push(time, smf[p], smf[p+1], smf[p+2]);
 						p+=3;
 						break;
-					// Note ON - 9[ch], Pitch, Velocity
-					case 0x9:
+					case 0xC: // Program Change - C[ch],
+					case 0xD: // Channel Pre - D[ch],
 						lastState = smf[p];
-						if(smf[p+2]!=0){
-							track.notes.push({
-								start: time,
-								stop: null,
-								pitch: smf[p+1],
-								pitchBend: [{timing:time,value:pitchBend}],
-								pan: [{timing:time,value:pan}],
-								expression: [{timing:time,value:expression}],
-								velocity: (smf[p+2]/127)*velocity/127,
-								channel: smf[p]-0x90
-							});
-						} else {
-							track.notes.some(function(note){
-								if(note.pitch==smf[p+1] && note.stop==null){
-									note.stop = time;
-									return true;
-								}
-							});
-						}
-						p+=3;
-						break;
-					// Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
-					case 0xA:
-						lastState = smf[p];
-						p+=3;
-						break;
-					// Control Change - B[ch],,
-					case 0xB:
-						lastState = smf[p];
-						switch(smf[p+1]){
-							case 6:
-								// RLSB=0 & RMSB=0 -> 6はピッチ
-								if(RpnLsb==0 && RpnMsb==0){
-									dataEntry = smf[p+2];
-								}
-								break;
-							case 7:
-								velocity = smf[p+2];
-								break;
-							case 10:
-								//Pan
-								track.notes.forEach(function(note){
-									if(note.stop==null){
-										note.pan.push({
-											timing: time,
-											value: smf[p+2]
-										});
-									}
-								});
-								pan = smf[p+2];
-								break;
-							case 11:
-								//Expression
-								track.notes.forEach(function(note){
-									if(note.stop==null){
-										note.expression.push({
-											timing: time,
-											value: smf[p+2]
-										});
-									}
-								});
-								expression = smf[p+2];
-								break;
-							case 100:
-								RpnLsb = smf[p+2];
-								break;
-							case 101:
-								RpnMsb = smf[p+2];
-								break;
-						}
-						p+=3;
-						break;
-					// Program Change - C[ch],
-					case 0xC:
-						lastState = smf[p];
-						track.instrument = smf[p+1];
+						// チャンネル毎に仕分けた後に解析する
+						channels[lastState&0x0F].messages.push(time, smf[p], smf[p+1]);
 						p+=2;
-						break;
-					// Channel Pre - D[ch],
-					case 0xD:
-						lastState = smf[p];
-						p+=2;
-						break;
-					// PitchBend Change - E[ch],,
-					case 0xE:
-						lastState = smf[p];
-						pitchBend = ((smf[p+2]*128+smf[p+1])-8192)/8192*dataEntry;
-						track.notes.forEach(function(note){
-							if(note.stop==null){
-								note.pitchBend.push({
-									timing: time,
-									value: pitchBend
-								});
-							}
-						});
-						p+=3;
 						break;
 					// SysEx Events or Meta Events - F[ch], ...
 					case 0xF:{
@@ -943,10 +847,143 @@ var PicoAudio = (function(){
 			if(songLength<time) songLength = time;
 		}
 		tempoTrack.push({ timing:songLength, value:120 });
+		
+		// Midi Events (0x8n - 0xEn) parse
+		for(var ch=0; ch<channels.length; ch++){
+			var channel = channels[ch];
+			var mes = channel.messages;
+			var p = 0;
+			var endPoint = channel.messages.length;
+			var dataEntry = 2;
+			var pitchBend = 0;
+			var pan = 64;
+			var expression = 127;
+			var velocity = 100;
+			var RpnLsb = -1;
+			var RpnMsb = -1;
+			var instrument = null;
+			while(p<endPoint){
+				// DeltaTime
+				var time = mes[p];
+				p++;
+				// Events
+				switch(Math.floor(mes[p]/0x10)){
+					// Note OFF - 8[ch], Pitch, Velocity
+					case 0x8:
+						channel.notes.some(function(note){
+							if(note.pitch==mes[p+1] && note.stop==null){
+								note.stop = time;
+								return true;
+							}
+						});
+						p+=3;
+						break;
+					// Note ON - 9[ch], Pitch, Velocity
+					case 0x9:
+						if(mes[p+2]!=0){
+							channel.notes.push({
+								start: time,
+								stop: null,
+								pitch: mes[p+1],
+								pitchBend: [{timing:time,value:pitchBend}],
+								pan: [{timing:time,value:pan}],
+								expression: [{timing:time,value:expression}],
+								velocity: (mes[p+2]/127)*velocity/127,
+								instrument: instrument,
+								channel: ch
+							});
+						} else {
+							channel.notes.some(function(note){
+								if(note.pitch==mes[p+1] && note.stop==null){
+									note.stop = time;
+									return true;
+								}
+							});
+						}
+						p+=3;
+						break;
+					// Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
+					case 0xA:
+						p+=3;
+						break;
+					// Control Change - B[ch],,
+					case 0xB:
+						switch(mes[p+1]){
+							case 6:
+								// RLSB=0 & RMSB=0 -> 6はピッチ
+								if(RpnLsb==0 && RpnMsb==0){
+									dataEntry = mes[p+2];
+								}
+								break;
+							case 7:
+								velocity = mes[p+2];
+								break;
+							case 10:
+								//Pan
+								channel.notes.forEach(function(note){
+									if(note.stop==null){
+										note.pan.push({
+											timing: time,
+											value: mes[p+2]
+										});
+									}
+								});
+								pan = mes[p+2];
+								break;
+							case 11:
+								//Expression
+								channel.notes.forEach(function(note){
+									if(note.stop==null){
+										note.expression.push({
+											timing: time,
+											value: mes[p+2]
+										});
+									}
+								});
+								expression = mes[p+2];
+								break;
+							case 100:
+								RpnLsb = mes[p+2];
+								break;
+							case 101:
+								RpnMsb = mes[p+2];
+								break;
+						}
+						p+=3;
+						break;
+					// Program Change - C[ch],
+					case 0xC:
+						instrument = mes[p+1];
+						p+=2;
+						break;
+					// Channel Pre - D[ch],
+					case 0xD:
+						p+=2;
+						break;
+					// PitchBend Change - E[ch],,
+					case 0xE:
+						pitchBend = ((mes[p+2]*128+mes[p+1])-8192)/8192*dataEntry;
+						channel.notes.forEach(function(note){
+							if(note.stop==null){
+								note.pitchBend.push({
+									timing: time,
+									value: pitchBend
+								});
+							}
+						});
+						p+=3;
+						break;
+					default: {
+						return "Error parseSMF.";
+					}
+				}
+			}
+		}
 		data.header = header;
 		data.tracks = tracks;
 		data.tempoTrack = tempoTrack;
 		data.beatTrack = beatTrack;
+		data.channels = channels;
 		data.songLength = songLength;
 		if(this.settings.isWebMIDI) data.messages = messages;
 		return data;
