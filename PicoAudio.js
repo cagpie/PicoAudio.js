@@ -695,7 +695,7 @@ var PicoAudio = (function(){
 		header.timemanage = smf[12];
 		header.resolution = getInt(smf.subarray(12, 14));
 		p += 4+header.size;
-		var tracks = new Array();
+		//var tracks = new Array();
 		var tempoTrack = new Array();
 		var beatTrack = new Array();
 		var channels = new Array();
@@ -712,11 +712,12 @@ var PicoAudio = (function(){
 				return "Irregular SMF.";
 			p += 4;
 			var track = new Object();
-			tracks.push(track);
-			track.size = getInt(smf.subarray(p, p+4));
+			//tracks.push(track);
+			//track.size = getInt(smf.subarray(p, p+4));
+			//p += 4;
+			//track.notes = [];
+			var endPoint = p+4 + getInt(smf.subarray(p, p+4));
 			p += 4;
-			track.notes = [];
-			var endPoint = p+track.size;
 			var time = 0;
 			var lastState = 1;
 			while(p<endPoint){
@@ -966,9 +967,10 @@ var PicoAudio = (function(){
 					}
 				}
 			}
+			delete channel.messages;
 		}
 		data.header = header;
-		data.tracks = tracks;
+		//data.tracks = tracks;
 		data.tempoTrack = tempoTrack;
 		data.beatTrack = beatTrack;
 		data.channels = channels;
