@@ -554,7 +554,7 @@ var PicoAudio = (function(){
 								that.clearFunc("timeout", noteOff);
 								that.clearFunc("note", note);
 								if(trigger.isNoteTrigger) trigger.noteOff(note);
-							}, that.getTime(note.stop - note.start) * 1000);
+							}, note.channel!=9 ? (that.getTime(note.stop) - that.getTime(note.start)) * 1000 : 1000);
 							that.pushFunc({
 								timeout: noteOff,
 								stopFunc: function(){ clearTimeout(noteOff); }
