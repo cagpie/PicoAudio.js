@@ -794,10 +794,10 @@ var PicoAudio = (function(){
 										break;
 									// Tempo
 									case 0x51:
-										data.tempo = 60*1000000/(smf[p+3]*0xffff + smf[p+4]*0xff + smf[p+5]);
+										data.tempo = 60*1000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5]);
 										tempoTrack.push({
 											timing: time,
-											value: 60*1000000/(smf[p+3]*0xffff + smf[p+4]*0xff + smf[p+5])
+											value: 60*1000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5])
 										});
 										break;
 									case 0x54:
