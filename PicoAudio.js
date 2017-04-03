@@ -355,14 +355,16 @@ var PicoAudio = (function(){
 		
 		if(!context.createStereoPanner && context.createPanner) {
 			// iOS, Old Browser
-			var panValue = option.pan ? (option.pan[0].value / 127) * 2 - 1 : 0;
+			var panValue = option.pan && option.pan[0].value != 64 ? (option.pan[0].value / 127) * 2 - 1 : 0;
 			var panAngle = panValue * 90;
 			var panX = Math.sin(panAngle * (Math.PI / 180));
 			var panZ = -Math.cos(panAngle * (Math.PI / 180));
 			panNode.panningModel = "equalpower";
 			panNode.setPosition(panX, 0, panZ);
 		} else if(context.createStereoPanner){
-			panNode.pan.value = option.pan ? (option.pan[0].value / 127) * 2 - 1 : 0;
+			var panValue = option.pan && option.pan[0].value != 64 ? (option.pan[0].value / 127) * 2 - 1 : 0;
+			if(panValue > 1.0) panValue = 1.0;
+			panNode.pan.value = panValue;
 		}
 		
 		gainNode.gain.value = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
@@ -396,8 +398,10 @@ var PicoAudio = (function(){
 						firstPan = false;
 						return;
 					}
+					var v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
+					if(v > 1.0) v = 1.0;
 					panNode.pan.setValueAtTime(
-						(p.value / 127) * 2 - 1,
+						v,
 						that.getTime(p.timing) + songStartTime
 					);
 				}) : false;
@@ -409,7 +413,8 @@ var PicoAudio = (function(){
 							firstPan = false;
 							return;
 						}
-						var v = (p.value / 127) * 2 - 1;
+						var v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
+						if(v > 1.0) v = 1.0;
 						var a = v * 90;
 						var x = Math.sin(a * (Math.PI / 180));
 						var z = -Math.cos(a * (Math.PI / 180));
@@ -427,7 +432,8 @@ var PicoAudio = (function(){
 						}
 						var reservePan = setTimeout(function(){
 							that.clearFunc("pan", reservePan)
-							var v = (p.value / 127) * 2 - 1;
+							var v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
+							if(v > 1.0) v = 1.0;
 							var a = v * 90;
 							var x = Math.sin(a * (Math.PI / 180));
 							var z = -Math.cos(a * (Math.PI / 180));
@@ -909,27 +915,27 @@ var PicoAudio = (function(){
 								break;
 							case 10:
 								//Pan
+								pan = mes[p+2];
 								channel.notes.forEach(function(note){
 									if(note.stop==null){
 										note.pan.push({
 											timing: time,
-											value: mes[p+2]
+											value: pan
 										});
 									}
 								});
-								pan = mes[p+2];
 								break;
 							case 11:
 								//Expression
+								expression = mes[p+2];
 								channel.notes.forEach(function(note){
 									if(note.stop==null){
 										note.expression.push({
 											timing: time,
-											value: mes[p+2]
+											value: expression
 										});
 									}
 								});
-								expression = mes[p+2];
 								break;
 							case 100:
 								rpnLsb = mes[p+2];
