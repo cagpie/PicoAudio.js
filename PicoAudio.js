@@ -909,6 +909,9 @@ var PicoAudio = (function(){
 								if(rpnLsb==0 && rpnMsb==0){
 									dataEntry = mes[p+2];
 								}
+								if(dataEntry > 24){ // 最大24らしい？
+									dataEntry = 24;
+								}
 								break;
 							case 7:
 								velocity = mes[p+2];
