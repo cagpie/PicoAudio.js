@@ -356,6 +356,7 @@ var PicoAudio = (function(){
 		if(!context.createStereoPanner && context.createPanner) {
 			// iOS, Old Browser
 			var panValue = option.pan && option.pan[0].value != 64 ? (option.pan[0].value / 127) * 2 - 1 : 0;
+			if(panValue > 1.0) panValue = 1.0;
 			var panAngle = panValue * 90;
 			var panX = Math.sin(panAngle * (Math.PI / 180));
 			var panZ = -Math.cos(panAngle * (Math.PI / 180));
@@ -909,7 +910,7 @@ var PicoAudio = (function(){
 								if(rpnLsb==0 && rpnMsb==0){
 									dataEntry = mes[p+2];
 								}
-								if(dataEntry > 24){ // 最大24らしい？
+								if(dataEntry > 24){
 									dataEntry = 24;
 								}
 								break;
