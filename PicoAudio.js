@@ -499,8 +499,9 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.stop = function(){
 		var states = this.states;
+		if(states.isPlaying==false) return;
 		states.isPlaying = false;
-		states.playIndex -= this.settings.hashBuffer;
+		states.playIndex -= this.settings.hashBuffer + 1;
 		states.stopTime = this.context.currentTime;
 		states.stopFuncs.forEach(function(n){
 			n.stopFunc();
@@ -522,6 +523,7 @@ var PicoAudio = (function(){
 		var states = this.states;
 		var hashedDataList = this.hashedDataList;
 		var that = this;
+		if(states.isPlaying==true) return;
 		states.isPlaying = true;
 		states.startTime = !states.startTime && !states.stopTime ? this.context.currentTime : (states.startTime + this.context.currentTime - states.stopTime);
 		states.stopFuncs = [];
