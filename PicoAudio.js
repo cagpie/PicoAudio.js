@@ -10,8 +10,10 @@ var PicoAudio = (function(){
 			hashLength: 1000,
 			hashBuffer: 1,
 			isWebMIDI: false,
+			isPlayWebMIDI: false,
 			WebMIDIPortOutputs: null,
-			WebMIDIPort: 0,
+			WebMIDIPortOutput: null,
+			WebMIDIPort: -1, // -1:auto
 			loop: false
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ /*console.log("end")*/ } };
@@ -27,6 +29,7 @@ var PicoAudio = (function(){
 				this.whitenoise.getChannelData(ch)[i] = Math.random() * 2 - 1;
 			}
 		}
+		this.onSongEndListener = null;
 	}
 
 	PicoAudio.prototype.createNote = function(option){
@@ -346,7 +349,7 @@ var PicoAudio = (function(){
 		var stop = this.getTime(option.stop) + songStartTime;
 		var pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
 		var channel = nonChannel ? 0 : (option.channel || 0);
-		var velocity = (option.velocity || 0.1) * Number(nonChannel ? 1 : (this.channels[channel][2] || 1)) * settings.globalVolume;
+		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] || 1)) * settings.globalVolume;
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
@@ -472,10 +475,22 @@ var PicoAudio = (function(){
 	PicoAudio.prototype.startWebMIDI = function(){
 		var outputs;
 		var that = this;
+		if(!navigator.requestMIDIAccess)
+			return;
 		navigator.requestMIDIAccess()
 			.then(function(midiAccess){
 					outputs = midiAccess.outputs;
 					that.settings.WebMIDIPortOutputs = outputs;
+					var output;
+					if(that.settings.WebMIDIPort==-1){
+						that.settings.WebMIDIPortOutputs.forEach(function(o){
+							if (!output) output = o;
+						});
+					} else {
+						output = that.settings.WebMIDIPortOutputs.get(settings.WebMIDIPort);
+					}
+					//console.log(output);
+					that.settings.WebMIDIPortOutput = output;
 					return outputs;
 			})
 			.catch(function(err){
@@ -486,13 +501,16 @@ var PicoAudio = (function(){
 	PicoAudio.prototype.initStatus = function(){
 		this.stop();
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
-		if(this.settings.isWebMIDI){
+		if(this.settings.isWebMIDI && this.settings.isPlayWebMIDI){
+			this.startWebMIDI();
+			if(this.settings.WebMIDIPortOutput==null)
+				return;
 			for(var t=0; t<16; t++){
-				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xE0+t, 0, 64]);
-				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 6, 0]);
-				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 7, 100]);
-				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 10, 64]);
-				this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0xB0+t, 11, 127]);
+				this.settings.WebMIDIPortOutput.send([0xE0+t, 0, 64]);
+				this.settings.WebMIDIPortOutput.send([0xB0+t, 6, 0]);
+				this.settings.WebMIDIPortOutput.send([0xB0+t, 7, 100]);
+				this.settings.WebMIDIPortOutput.send([0xB0+t, 10, 64]);
+				this.settings.WebMIDIPortOutput.send([0xB0+t, 11, 127]);
 			}
 		}
 	};
@@ -507,12 +525,18 @@ var PicoAudio = (function(){
 			n.stopFunc();
 		});
 		states.stopFuncs = [];
-		if(this.settings.isWebMIDI){
-			for(var t=0; t<16; t++){
-				for(var i=0; i<128; i++){
-					this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort).send([0x80+t, i, 0]);
+		if(this.settings.isWebMIDI && this.settings.isPlayWebMIDI){
+			if(this.settings.WebMIDIPortOutput==null)
+				return;
+			//this.settings.WebMIDIPortOutput.send([0xFC]);
+			setTimeout(function(){
+				for(var t=0; t<16; t++){
+					for(var i=0; i<128; i++){
+						that.settings.WebMIDIPortOutput.send([0x80+t, i, 0]);
+						//that.settings.WebMIDIPortOutput.send([0x80+t, i, 0], 500);
+					}
 				}
-			}
+			}, 200);
 		}
 	};
 
@@ -547,10 +571,15 @@ var PicoAudio = (function(){
 			rootTimeout: reserveSongEnd,
 			stopFunc: function(){ clearTimeout(reserveSongEnd); }
 		});
+		if(settings.isWebMIDI && settings.isPlayWebMIDI){
+			if(settings.WebMIDIPortOutput!=null){
+				//settings.WebMIDIPortOutput.send([0xFA]);
+			}
+		}
 		(function playHash(idx){
 			states.playIndex = idx;
 			if(hashedDataList && hashedDataList[idx]){
-				if(!settings.isWebMIDI){
+				if(!settings.isWebMIDI || !settings.isPlayWebMIDI){
 					hashedDataList[idx].forEach(function(note){
 						that.pushFunc({
 							note: note,
@@ -576,8 +605,15 @@ var PicoAudio = (function(){
 					});
 				} else {
 					hashedDataList[idx].forEach(function(message){
-						if(message.message[0]!=0xf0 && message.message[0]!=0xff)
-						settings.WebMIDIPortOutputs.get(settings.WebMIDIPort).send(message.message, (that.getTime(message.timing) - context.currentTime +window.performance.now()/1000 + states.startTime) * 1000);
+						if(settings.WebMIDIPortOutput!=null){
+							if(message.message[0]!=0xf0 && message.message[0]!=0xff){
+								try{
+									settings.WebMIDIPortOutput.send(message.message, (that.getTime(message.timing) - context.currentTime +window.performance.now()/1000 + states.startTime) * 1000);
+								}catch(e){
+									console.log(message.message);
+								}
+							}
+						}
 					});
 				}
 			}
@@ -607,7 +643,7 @@ var PicoAudio = (function(){
 		this.tempoTrack = data.tempoTrack;
 		var that = this;
 		var hashedDataList = [];
-		if(!this.settings.isWebMIDI){
+		if(!this.settings.isWebMIDI || !this.settings.isPlayWebMIDI){
 			data.channels.forEach(function(channel){
 				channel.notes.forEach(function(note){
 					var option = note;
@@ -646,13 +682,37 @@ var PicoAudio = (function(){
 		this.settings.loop = loop;
 	};
 
+	PicoAudio.prototype.getWebMIDI = function(){
+		return this.settings.isWebMIDI;
+	};
+
+	PicoAudio.prototype.setWebMIDI = function(enable){
+		this.settings.isWebMIDI = enable;
+	};
+
+	PicoAudio.prototype.getPlayWebMIDI = function(){
+		return this.settings.isPlayWebMIDI;
+	};
+
+	PicoAudio.prototype.setPlayWebMIDI = function(enable){
+		this.settings.isPlayWebMIDI = enable;
+	};
+
 	PicoAudio.prototype.setStartTime = function(offset){
 		this.states.startTime -= offset;
 		this.states.playIndex = Math.floor(offset * 1000 / this.settings.hashLength);
 	};
 
+	PicoAudio.prototype.setOnSongEndListener = function(listener){
+		this.onSongEndListener = listener;
+	};
+
 	PicoAudio.prototype.onSongEnd = function(){
-		if (this.settings.loop){
+		if(this.onSongEndListener){
+			var isStopFunc = this.onSongEndListener();
+			if(isStopFunc) return;
+		}
+		if(this.settings.loop){
 			this.initStatus();
 			this.play();
 		}
@@ -740,6 +800,8 @@ var PicoAudio = (function(){
 				// WebMIDIAPI
 				if(this.settings.isWebMIDI) var cashP = p;
 				// Events
+				var mesIdx;
+				var mesObj = {timing:time, mes:[]};
 				switch(Math.floor(smf[p]/0x10)){
 					case 0x8: // Note OFF - 8[ch], Pitch, Velocity
 					case 0x9: // Note ON - 9[ch], Pitch, Velocity
@@ -748,14 +810,30 @@ var PicoAudio = (function(){
 					case 0xE: // PitchBend Change - E[ch],,
 						lastState = smf[p];
 						// チャンネル毎に仕分けた後に解析する
-						channels[lastState&0x0F].messages.push(time, smf[p], smf[p+1], smf[p+2]);
+						mesObj.mes.push(smf[p], smf[p+1], smf[p+2]);
+						// デルタタイムの順番になるように配列に挿入
+						var channelMessages = channels[lastState&0x0F].messages;
+						for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
+							var tempMesObj = channelMessages[mesIdx];
+							if (time >= tempMesObj.timing) break;
+						}
+						mesIdx++;
+						channelMessages.splice(mesIdx, 0, mesObj);
 						p+=3;
 						break;
 					case 0xC: // Program Change - C[ch],
 					case 0xD: // Channel Pre - D[ch],
 						lastState = smf[p];
 						// チャンネル毎に仕分けた後に解析する
-						channels[lastState&0x0F].messages.push(time, smf[p], smf[p+1]);
+						mesObj.mes.push(smf[p], smf[p+1]);
+						// デルタタイムの順番になるように配列に挿入
+						var channelMessages = channels[lastState&0x0F].messages;
+						for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
+							var tempMesObj = channelMessages[mesIdx];
+							if (time >= tempMesObj.timing) break;
+						}
+						mesIdx++;
+						channelMessages.splice(mesIdx, 0, mesObj);
 						p+=2;
 						break;
 					// SysEx Events or Meta Events - F[ch], ...
@@ -766,6 +844,24 @@ var PicoAudio = (function(){
 							case 0xF7:
 								// SysEx Events
 								var lengthAry = variableLengthToInt(smf.subarray(p+1, p+1+4));
+								
+								// Master Volume
+								if(lengthAry[0]>=7 && smf[p+2]==0x7f && smf[p+3]==0x7f && smf[p+4]==0x04 && smf[p+5]==0x01){
+									// 全チャンネルにMasterVolumeメッセージを挿入する
+									for(var i=0; i<16; i++) {
+										// 0xF0, 6(length), 0x7f, 0x7f, 0x04, 0x01, 0xNN, volume
+										mesObj.mes.push(smf[p], lengthAry[0]-1, smf[p+2], smf[p+3], smf[p+4], smf[p+5], smf[p+6], smf[p+7]);
+										// デルタタイムの順番になるように配列に挿入
+										var channelMessages = channels[i].messages;
+										for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
+											var tempMesObj = channelMessages[mesIdx];
+											if(time >= tempMesObj.timing) break;
+										}
+    									mesIdx++;
+										channelMessages.splice(mesIdx, 0, mesObj);
+									}
+								}
+								
 								p+=1+lengthAry[1]+lengthAry[0];
 								break;
 							case 0xF1:
@@ -839,7 +935,23 @@ var PicoAudio = (function(){
 				}
 				// WebMIDIAPI
 				if(this.settings.isWebMIDI){
-					messages.push({ message: smf.slice(cashP, p), timing: time });
+					if(lastState!=null){
+						var state = smf[cashP];
+//						if(state==0xF0 || state==0xF7){
+//							// 長さ情報を取り除いて純粋なSysExメッセージにする
+//							var lengthAry = variableLengthToInt(smf.subarray(cashP+1, cashP+1+4));
+//							var sysExStartP = cashP+1+lengthAry[1];
+//							var sysExEndP = sysExStartP+lengthAry[0];
+//							var webMIDIMes = new Uint8Array(1 + lengthAry[0]);
+//							webMIDIMes[0] = state;
+//							var size = sysExEndP - sysExStartP;
+//							for (var i=0; i<size; i++)
+//								webMIDIMes[i+1] = smf[sysExStartP + i];
+//							messages.push({ message: webMIDIMes, timing: time });
+//						} else {
+							messages.push({ message: smf.subarray(cashP, p), timing: time });
+//						}
+					}
 				}
 			}
 			if(songLength<time) songLength = time;
@@ -849,7 +961,6 @@ var PicoAudio = (function(){
 		// Midi Events (0x8n - 0xEn) parse
 		for(var ch=0; ch<channels.length; ch++){
 			var channel = channels[ch];
-			var mes = channel.messages;
 			var p = 0;
 			var endPoint = channel.messages.length;
 			var dataEntry = 2;
@@ -860,127 +971,148 @@ var PicoAudio = (function(){
 			var rpnLsb = -1;
 			var rpnMsb = -1;
 			var instrument = null;
+			var masterVolume = 127;
 			while(p<endPoint){
+				var mesObj = channel.messages[p];
 				// DeltaTime
-				var time = mes[p];
-				p++;
+				var time = mesObj.timing;
 				// Events
-				switch(Math.floor(mes[p]/0x10)){
+				var mes = channel.messages[p].mes;
+				switch(Math.floor(mes[0]/0x10)){
 					// Note OFF - 8[ch], Pitch, Velocity
 					case 0x8:
-						channel.notes.some(function(note){
-							if(note.pitch==mes[p+1] && note.stop==null){
+						for(var i=channel.notes.length-1; i>=0; i--){
+							var note = channel.notes[i];
+							if(note.pitch==mes[1] && note.stop==null){
 								note.stop = time;
-								return true;
+								break;
 							}
-						});
-						p+=3;
+						}
 						break;
 					// Note ON - 9[ch], Pitch, Velocity
 					case 0x9:
-						if(mes[p+2]!=0){
+						if(mes[2]!=0){
 							channel.notes.push({
 								start: time,
 								stop: null,
-								pitch: mes[p+1],
+								pitch: mes[1],
 								pitchBend: [{timing:time,value:pitchBend}],
 								pan: [{timing:time,value:pan}],
-								expression: [{timing:time,value:expression}],
-								velocity: (mes[p+2]/127)*velocity/127,
+								expression: [{timing:time,value:expression*(masterVolume/127)}],
+								velocity: (mes[2]/127)*(velocity/127),
 								instrument: instrument,
 								channel: ch
 							});
 						} else {
-							channel.notes.some(function(note){
-								if(note.pitch==mes[p+1] && note.stop==null){
+							for(var i=channel.notes.length-1; i>=0; i--){
+								var note = channel.notes[i];
+								if(note.pitch==mes[1] && note.stop==null){
 									note.stop = time;
-									return true;
+									break;
 								}
-							});
+							}
 						}
-						p+=3;
 						break;
 					// Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
 					case 0xA:
-						p+=3;
 						break;
 					// Control Change - B[ch],,
 					case 0xB:
-						switch(mes[p+1]){
+						switch(mes[1]){
 							case 6:
 								// RLSB=0 & RMSB=0 -> 6はピッチ
 								if(rpnLsb==0 && rpnMsb==0){
-									dataEntry = mes[p+2];
+									dataEntry = mes[2];
 								}
 								if(dataEntry > 24){
 									dataEntry = 24;
 								}
 								break;
 							case 7:
-								velocity = mes[p+2];
+								velocity = mes[2];
 								break;
 							case 10:
 								//Pan
-								pan = mes[p+2];
-								channel.notes.forEach(function(note){
-									if(note.stop==null){
-										note.pan.push({
-											timing: time,
-											value: pan
-										});
-									}
-								});
+								pan = mes[2];
+								for(var i=channel.notes.length-1; i>=0; i--){
+									var note = channel.notes[i];
+									if(note.stop!=null) break;
+									note.pan.push({
+										timing: time,
+										value: pan
+									});
+								}
 								break;
 							case 11:
 								//Expression
-								expression = mes[p+2];
-								channel.notes.forEach(function(note){
-									if(note.stop==null){
-										note.expression.push({
-											timing: time,
-											value: expression
-										});
-									}
-								});
+								expression = mes[2];
+								for(var i=channel.notes.length-1; i>=0; i--){
+									var note = channel.notes[i];
+									if(note.stop!=null) break;
+									note.expression.push({
+										timing: time,
+										value: expression*(masterVolume/127)
+									});
+								}
 								break;
 							case 100:
-								rpnLsb = mes[p+2];
+								rpnLsb = mes[2];
 								break;
 							case 101:
-								rpnMsb = mes[p+2];
+								rpnMsb = mes[2];
 								break;
 						}
-						p+=3;
 						break;
 					// Program Change - C[ch],
 					case 0xC:
-						instrument = mes[p+1];
-						p+=2;
+						instrument = mes[1];
 						break;
 					// Channel Pre - D[ch],
 					case 0xD:
-						p+=2;
 						break;
 					// PitchBend Change - E[ch],,
 					case 0xE:
-						pitchBend = ((mes[p+2]*128+mes[p+1])-8192)/8192*dataEntry;
-						channel.notes.forEach(function(note){
-							if(note.stop==null){
-								note.pitchBend.push({
-									timing: time,
-									value: pitchBend
-								});
-							}
-						});
-						p+=3;
+						pitchBend = ((mes[2]*128+mes[1])-8192)/8192*dataEntry;
+						for(var i=channel.notes.length-1; i>=0; i--){
+							var note = channel.notes[i];
+							if(note.stop!=null) break;
+							note.pitchBend.push({
+								timing: time,
+								value: pitchBend
+							});
+						}
+						break;
+					case 0xF:
+						//lastState = smf[p]; <- ランニングナントカは無いらしい
+						switch(mes[0]){
+							case 0xF0:
+							case 0xF7:
+								// Master Volume
+								if(mes[1]>=6 && mes[2]==0x7f && mes[3]==0x7f && mes[4]==0x04 && mes[5]==0x01){
+									var vol = mes[7];
+									if(vol > 127) vol = 127;
+									masterVolume = vol;
+									for(var i=channel.notes.length-1; i>=0; i--){
+										var note = channel.notes[i];
+										if(note.stop!=null) break;
+										note.expression.push({
+											timing: time,
+											value: expression*(masterVolume/127)
+										});
+									}
+								}
+								break;
+						}
 						break;
 					default: {
 						return "Error parseSMF.";
 					}
 				}
+				p++;
 			}
 			delete channel.messages;
 		}
+		
 		data.header = header;
 		//data.tracks = tracks;
 		data.tempoTrack = tempoTrack;
@@ -1007,7 +1139,6 @@ var PicoAudio = (function(){
 			i++;
 			return [value, i];
 		}
-		
 		return data;
 	};
 
@@ -1028,12 +1159,12 @@ var PicoAudio = (function(){
 				setTimeout(disconnectFunc, waitTime * 1000);
 			}
 		}
-	}
+	};
 
 	PicoAudio.prototype.pushFunc = function(tar){
 		if(!tar.note && !tar.rootTimeout && !this.trigger.isNoteTrigger) return;
 		this.states.stopFuncs.push(tar);
-	}
+	};
 
 	PicoAudio.prototype.clearFunc = function(tar1, tar2){
 		if(tar1!="note" && tar1!="rootTimeout" && !this.trigger.isNoteTrigger) return;
@@ -1044,7 +1175,7 @@ var PicoAudio = (function(){
 				return true;
 			}
 		});
-	}
+	};
 
 	return PicoAudio;
 })();
