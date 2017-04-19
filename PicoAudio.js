@@ -7,7 +7,7 @@ var PicoAudio = (function(){
 			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
-			hashLength: 1000,
+			hashLength: 100,
 			hashBuffer: 1,
 			isWebMIDI: false,
 			isPlayWebMIDI: false,
@@ -354,6 +354,8 @@ var PicoAudio = (function(){
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var gainNode = context.createGain();
+		var modulationOscillator = channel!=9 ? context.createOscillator() : null;
+		var modulationGainNode = channel!=9 ? context.createGain() : null;
 		var that = this;
 		
 		if(!context.createStereoPanner && context.createPanner) {
@@ -450,6 +452,30 @@ var PicoAudio = (function(){
 					}) : false;
 				}
 			}
+			
+			if(modulationOscillator && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
+				firstPan = true;
+				option.modulation ? option.modulation.forEach(function(p){
+					if(firstPan){
+						firstPan = false;
+						return;
+					}
+					var m = p.value / 127;
+					if(m > 1.0) m = 1.0;
+					modulationGainNode.gain.setValueAtTime(
+						pitch * 10 / 440 * m,
+						that.getTime(p.timing) + songStartTime
+					);
+				}) : false;
+				var m = option.expression ? option.modulation[0].value / 127 : 0;
+				if(m > 1.0) m = 1.0;
+				modulationGainNode.gain.value = pitch * 10 / 440 * m;
+				modulationOscillator.frequency.value = 6;
+				modulationOscillator.connect(modulationGainNode);
+				modulationGainNode.connect(oscillator.frequency);
+			} else {
+				modulationOscillator = null;
+			}
 			oscillator.connect(panNode);
 			panNode.connect(gainNode);
 			gainNode.connect(context.destination);
@@ -458,6 +484,8 @@ var PicoAudio = (function(){
 			gainNode.connect(context.destination);
 		}
 		oscillator.start(start);
+		if(modulationOscillator)
+			modulationOscillator.start(start);
 		if(channel!=9 && !nonChannel)
 			that.stopAudioNode(oscillator, stop);
 		return {
@@ -968,8 +996,11 @@ var PicoAudio = (function(){
 			var pan = 64;
 			var expression = 127;
 			var velocity = 100;
-			var rpnLsb = -1;
-			var rpnMsb = -1;
+			var modulation = 0;
+			var nrpnLsb = 127;
+			var nrpnMsb = 127;
+			var rpnLsb = 127;
+			var rpnMsb = 127;
 			var instrument = null;
 			var masterVolume = 127;
 			while(p<endPoint){
@@ -1000,6 +1031,7 @@ var PicoAudio = (function(){
 								pan: [{timing:time,value:pan}],
 								expression: [{timing:time,value:expression*(masterVolume/127)}],
 								velocity: (mes[2]/127)*(velocity/127),
+								modulation: [{timing:time,value:modulation}],
 								instrument: instrument,
 								channel: ch
 							});
@@ -1019,13 +1051,34 @@ var PicoAudio = (function(){
 					// Control Change - B[ch],,
 					case 0xB:
 						switch(mes[1]){
-							case 6:
-								// RLSB=0 & RMSB=0 -> 6はピッチ
-								if(rpnLsb==0 && rpnMsb==0){
-									dataEntry = mes[2];
+							case 1:
+								modulation = mes[2];
+								for(var i=channel.notes.length-1; i>=0; i--){
+									var note = channel.notes[i];
+									if(note.stop!=null) break;
+									note.modulation.push({
+										timing: time,
+										value: modulation
+									});
 								}
-								if(dataEntry > 24){
-									dataEntry = 24;
+								break;
+							case 6:
+								if(rpnLsb==0 && rpnMsb==0){
+									// RLSB=0 & RMSB=0 -> 6はピッチ
+									dataEntry = mes[2];
+									if(dataEntry > 24){
+										dataEntry = 24;
+									}
+								}
+								if(nrpnLsb==8 && nrpnMsb==1){
+									// ビブラート・レイト(GM2/GS/XG)
+									//console.log("CC  8 1 6 "+mes[2]+" time:"+time);
+								} else if(nrpnLsb==9 && nrpnMsb==1){
+									// ビブラート・デプス(GM2/GS/XG)
+									//console.log("CC  9 1 6 "+mes[2]+" time:"+time);
+								} else if(nrpnLsb==10 && nrpnMsb==1){
+									// ビブラート・ディレイ(GM2/GS/XG)
+									//console.log("CC 10 1 6 "+mes[2]+" time:"+time);
 								}
 								break;
 							case 7:
@@ -1054,6 +1107,12 @@ var PicoAudio = (function(){
 										value: expression*(masterVolume/127)
 									});
 								}
+								break;
+							case 98:
+								nrpnLsb = mes[2];
+								break;
+							case 99:
+								nrpnMsb = mes[2];
 								break;
 							case 100:
 								rpnLsb = mes[2];
