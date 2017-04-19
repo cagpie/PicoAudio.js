@@ -1003,6 +1003,7 @@ var PicoAudio = (function(){
 			var rpnMsb = 127;
 			var instrument = null;
 			var masterVolume = 127;
+			var nowNoteOnIdxAry = [];
 			while(p<endPoint){
 				var mesObj = channel.messages[p];
 				// DeltaTime
@@ -1012,18 +1013,21 @@ var PicoAudio = (function(){
 				switch(Math.floor(mes[0]/0x10)){
 					// Note OFF - 8[ch], Pitch, Velocity
 					case 0x8:
-						for(var i=channel.notes.length-1; i>=0; i--){
-							var note = channel.notes[i];
+						var i=0;
+						nowNoteOnIdxAry.some(function(idx){
+							var note = channel.notes[idx];
 							if(note.pitch==mes[1] && note.stop==null){
 								note.stop = time;
-								break;
+								nowNoteOnIdxAry.splice(i, 1);
+								return true;
 							}
-						}
+							i++;
+						});
 						break;
 					// Note ON - 9[ch], Pitch, Velocity
 					case 0x9:
 						if(mes[2]!=0){
-							channel.notes.push({
+							var note = {
 								start: time,
 								stop: null,
 								pitch: mes[1],
@@ -1034,15 +1038,20 @@ var PicoAudio = (function(){
 								modulation: [{timing:time,value:modulation}],
 								instrument: instrument,
 								channel: ch
-							});
+							};
+							nowNoteOnIdxAry.push(channel.notes.length);
+							channel.notes.push(note);
 						} else {
-							for(var i=channel.notes.length-1; i>=0; i--){
-								var note = channel.notes[i];
+							var i=0;
+							nowNoteOnIdxAry.some(function(idx){
+								var note = channel.notes[idx];
 								if(note.pitch==mes[1] && note.stop==null){
 									note.stop = time;
-									break;
+									nowNoteOnIdxAry.splice(i, 1);
+									return true;
 								}
-							}
+								i++;
+							});
 						}
 						break;
 					// Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
@@ -1053,14 +1062,17 @@ var PicoAudio = (function(){
 						switch(mes[1]){
 							case 1:
 								modulation = mes[2];
-								for(var i=channel.notes.length-1; i>=0; i--){
-									var note = channel.notes[i];
-									if(note.stop!=null) break;
-									note.modulation.push({
-										timing: time,
-										value: modulation
-									});
-								}
+								moduCnt++;//debug
+								if(modulation>moduMax)moduMax=modulation;//debug
+								nowNoteOnIdxAry.forEach(function(idx){
+									var note = channel.notes[idx];
+									if(note.stop==null){
+										note.modulation.push({
+											timing: time,
+											value: modulation
+										});
+									}
+								});
 								break;
 							case 6:
 								if(rpnLsb==0 && rpnMsb==0){
@@ -1087,26 +1099,29 @@ var PicoAudio = (function(){
 							case 10:
 								//Pan
 								pan = mes[2];
-								for(var i=channel.notes.length-1; i>=0; i--){
-									var note = channel.notes[i];
-									if(note.stop!=null) break;
-									note.pan.push({
-										timing: time,
-										value: pan
-									});
-								}
+								nowNoteOnIdxAry.forEach(function(idx){
+									var note = channel.notes[idx];
+									if(note.stop==null){
+										note.pan.push({
+											timing: time,
+											value: pan
+										});
+									}
+								});
 								break;
 							case 11:
 								//Expression
 								expression = mes[2];
-								for(var i=channel.notes.length-1; i>=0; i--){
-									var note = channel.notes[i];
-									if(note.stop!=null) break;
-									note.expression.push({
-										timing: time,
-										value: expression*(masterVolume/127)
-									});
-								}
+								nowNoteOnIdxAry.forEach(function(idx){
+									var note = channel.notes[idx];
+									if(note.stop==null){
+										note.expression.push({
+											timing: time,
+											value: expression*(masterVolume/127)
+										});
+									}
+								});
+								break;
 								break;
 							case 98:
 								nrpnLsb = mes[2];
@@ -1132,14 +1147,15 @@ var PicoAudio = (function(){
 					// PitchBend Change - E[ch],,
 					case 0xE:
 						pitchBend = ((mes[2]*128+mes[1])-8192)/8192*dataEntry;
-						for(var i=channel.notes.length-1; i>=0; i--){
-							var note = channel.notes[i];
-							if(note.stop!=null) break;
-							note.pitchBend.push({
-								timing: time,
-								value: pitchBend
-							});
-						}
+						nowNoteOnIdxAry.forEach(function(idx){
+							var note = channel.notes[idx];
+							if(note.stop==null){
+								note.pitchBend.push({
+									timing: time,
+									value: pitchBend
+								});
+							}
+						});
 						break;
 					case 0xF:
 						//lastState = smf[p]; <- ランニングナントカは無いらしい
@@ -1151,14 +1167,15 @@ var PicoAudio = (function(){
 									var vol = mes[7];
 									if(vol > 127) vol = 127;
 									masterVolume = vol;
-									for(var i=channel.notes.length-1; i>=0; i--){
-										var note = channel.notes[i];
-										if(note.stop!=null) break;
-										note.expression.push({
-											timing: time,
-											value: expression*(masterVolume/127)
-										});
-									}
+									nowNoteOnIdxAry.forEach(function(idx){
+										var note = channel.notes[idx];
+										if(note.stop==null){
+											note.expression.push({
+												timing: time,
+												value: expression*(masterVolume/127)
+											});
+										}
+									});
 								}
 								break;
 						}
