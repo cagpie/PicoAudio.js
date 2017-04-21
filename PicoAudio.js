@@ -30,7 +30,7 @@ var PicoAudio = (function(){
 			}
 		}
 		// リバーブ用のインパルス応答音声データ（てきとう）
-		var sampleLength = this.context.sampleRate*2.5;
+		var sampleLength = this.context.sampleRate*4;
 		this.impulseResponse = this.context.createBuffer(2, sampleLength, this.context.sampleRate);
 		for (var ch = 0; ch<2; ch++) {
 			var buf = this.impulseResponse.getChannelData(ch);
@@ -42,7 +42,7 @@ var PicoAudio = (function(){
 				*(s >= 0.030 && s < 0.031 ? v*2 : v)
 				*(s >= 0.040 && s < 0.042 ? v*1.5 : v)
 				*(s >= 0.050 && s < 0.054 ? v*1.25 : v)
-				*Math.random()*0.1*Math.pow((v-0.030), 5);
+				*Math.random()*0.2*Math.pow((v-0.030), 4);
 				buf[i] = d;
 			}
 		}
