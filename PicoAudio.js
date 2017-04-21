@@ -7,7 +7,7 @@ var PicoAudio = (function(){
 			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
-			hashLength: 100,
+			hashLength: 1000,
 			hashBuffer: 1,
 			isWebMIDI: false,
 			isPlayWebMIDI: false,
@@ -29,6 +29,32 @@ var PicoAudio = (function(){
 				this.whitenoise.getChannelData(ch)[i] = Math.random() * 2 - 1;
 			}
 		}
+		// リバーブ用のインパルス応答音声データ（てきとう）
+		var sampleLength = this.context.sampleRate*2.5;
+		this.impulseResponse = this.context.createBuffer(2, sampleLength, this.context.sampleRate);
+		for (var ch = 0; ch<2; ch++) {
+			var buf = this.impulseResponse.getChannelData(ch);
+			for (var i = 0; i<sampleLength; i++) {
+				var v = ((sampleLength-i)/sampleLength);
+				var s = i/this.context.sampleRate;
+				var r = i/sampleLength;
+				var d = (s < 0.030 ? 0 : v)
+				*(s >= 0.030 && s < 0.031 ? v*2 : v)
+				*(s >= 0.040 && s < 0.042 ? v*1.5 : v)
+				*(s >= 0.050 && s < 0.054 ? v*1.25 : v)
+				*Math.random()*0.1*Math.pow((v-0.030), 5);
+				buf[i] = d;
+			}
+		}
+		// リバーブ用（convolverは重いので１つだけ作成）
+		this.convolver = this.context.createConvolver();
+		this.convolver.buffer = this.impulseResponse;
+		//this.convolver.normalize = false;
+		this.convolverGainNode = this.context.createGain();
+		this.convolverGainNode.gain.value = 1;
+		this.convolver.connect(this.convolverGainNode);
+		this.convolverGainNode.connect(this.context.destination);
+		
 		this.onSongEndListener = null;
 	}
 
@@ -354,8 +380,6 @@ var PicoAudio = (function(){
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var gainNode = context.createGain();
-		var modulationOscillator = channel!=9 ? context.createOscillator() : null;
-		var modulationGainNode = channel!=9 ? context.createGain() : null;
 		var that = this;
 		
 		if(!context.createStereoPanner && context.createPanner) {
@@ -452,42 +476,66 @@ var PicoAudio = (function(){
 					}) : false;
 				}
 			}
-			
-			if(modulationOscillator && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
-				firstPan = true;
-				option.modulation ? option.modulation.forEach(function(p){
-					if(firstPan){
-						firstPan = false;
-						return;
-					}
-					var m = p.value / 127;
-					if(m > 1.0) m = 1.0;
-					modulationGainNode.gain.setValueAtTime(
-						pitch * 10 / 440 * m,
-						that.getTime(p.timing) + songStartTime
-					);
-				}) : false;
-				var m = option.expression ? option.modulation[0].value / 127 : 0;
-				if(m > 1.0) m = 1.0;
-				modulationGainNode.gain.value = pitch * 10 / 440 * m;
-				modulationOscillator.frequency.value = 6;
-				modulationOscillator.connect(modulationGainNode);
-				modulationGainNode.connect(oscillator.frequency);
-			} else {
-				modulationOscillator = null;
-			}
 			oscillator.connect(panNode);
 			panNode.connect(gainNode);
-			gainNode.connect(context.destination);
 		} else {
 			oscillator.connect(gainNode);
-			gainNode.connect(context.destination);
 		}
-		oscillator.start(start);
+		gainNode.connect(context.destination);
+		
+		if(channel!=9 && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
+			var modulationOscillator = context.createOscillator();
+			var modulationGainNode = context.createGain();
+			firstPan = true;
+			option.modulation ? option.modulation.forEach(function(p){
+				if(firstPan){
+					firstPan = false;
+					return;
+				}
+				var m = p.value / 127;
+				if(m > 1.0) m = 1.0;
+				modulationGainNode.gain.setValueAtTime(
+					pitch * 10 / 440 * m,
+					that.getTime(p.timing) + songStartTime
+				);
+			}) : false;
+			var m = option.modulation ? option.modulation[0].value / 127 : 0;
+			if(m > 1.0) m = 1.0;
+			modulationGainNode.gain.value = pitch * 10 / 440 * m;
+			modulationOscillator.frequency.value = 6;
+			modulationOscillator.connect(modulationGainNode);
+			modulationGainNode.connect(oscillator.frequency);
+		}
+		
+		if(option.reverb && (option.reverb.length >= 2 || option.reverb[0].value > 0)){
+			var convolver = this.convolver;
+			var convolverGainNode = context.createGain();
+			firstPan = true;
+			option.reverb ? option.reverb.forEach(function(p){
+				if(firstPan){
+					firstPan = false;
+					return;
+				}
+				var r = p.value / 127;
+				if(r > 1.0) r = 1.0;
+				convolverGainNode.gain.setValueAtTime(
+					r * gainNode.gain.value,
+					that.getTime(p.timing) + songStartTime
+				);
+			}) : false;
+			var r = option.reverb ? option.reverb[0].value / 127 : 0;
+			if(r > 1.0) r = 1.0;
+			convolverGainNode.gain.value = r * gainNode.gain.value;
+			oscillator.connect(convolverGainNode);
+			convolverGainNode.connect(convolver);
+		}
+		
 		if(modulationOscillator)
 			modulationOscillator.start(start);
-		if(channel!=9 && !nonChannel)
-			that.stopAudioNode(oscillator, stop);
+		
+		oscillator.start(start);
+ 		if(channel!=9 && !nonChannel)
+ 			that.stopAudioNode(oscillator, stop);
 		return {
 			start: start,
 			stop: stop,
@@ -997,6 +1045,7 @@ var PicoAudio = (function(){
 			var expression = 127;
 			var velocity = 100;
 			var modulation = 0;
+			var reverb = 0;
 			var nrpnLsb = 127;
 			var nrpnMsb = 127;
 			var rpnLsb = 127;
@@ -1036,6 +1085,7 @@ var PicoAudio = (function(){
 								expression: [{timing:time,value:expression*(masterVolume/127)}],
 								velocity: (mes[2]/127)*(velocity/127),
 								modulation: [{timing:time,value:modulation}],
+								reverb: [{timing:time,value:reverb}],
 								instrument: instrument,
 								channel: ch
 							};
@@ -1062,16 +1112,12 @@ var PicoAudio = (function(){
 						switch(mes[1]){
 							case 1:
 								modulation = mes[2];
-								moduCnt++;//debug
-								if(modulation>moduMax)moduMax=modulation;//debug
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
-									if(note.stop==null){
-										note.modulation.push({
-											timing: time,
-											value: modulation
-										});
-									}
+									note.modulation.push({
+										timing: time,
+										value: modulation
+									});
 								});
 								break;
 							case 6:
@@ -1083,13 +1129,13 @@ var PicoAudio = (function(){
 									}
 								}
 								if(nrpnLsb==8 && nrpnMsb==1){
-									// ビブラート・レイト(GM2/GS/XG)
+									// (保留)ビブラート・レイト(GM2/GS/XG)
 									//console.log("CC  8 1 6 "+mes[2]+" time:"+time);
 								} else if(nrpnLsb==9 && nrpnMsb==1){
-									// ビブラート・デプス(GM2/GS/XG)
+									// (保留)ビブラート・デプス(GM2/GS/XG)
 									//console.log("CC  9 1 6 "+mes[2]+" time:"+time);
 								} else if(nrpnLsb==10 && nrpnMsb==1){
-									// ビブラート・ディレイ(GM2/GS/XG)
+									// (保留)ビブラート・ディレイ(GM2/GS/XG)
 									//console.log("CC 10 1 6 "+mes[2]+" time:"+time);
 								}
 								break;
@@ -1101,12 +1147,10 @@ var PicoAudio = (function(){
 								pan = mes[2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
-									if(note.stop==null){
-										note.pan.push({
-											timing: time,
-											value: pan
-										});
-									}
+									note.pan.push({
+										timing: time,
+										value: pan
+									});
 								});
 								break;
 							case 11:
@@ -1114,14 +1158,21 @@ var PicoAudio = (function(){
 								expression = mes[2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
-									if(note.stop==null){
-										note.expression.push({
-											timing: time,
-											value: expression*(masterVolume/127)
-										});
-									}
+									note.expression.push({
+										timing: time,
+										value: expression*(masterVolume/127)
+									});
 								});
 								break;
+							case 91:
+								reverb = mes[2];
+								nowNoteOnIdxAry.forEach(function(idx){
+									var note = channel.notes[idx];
+									note.reverb.push({
+										timing: time,
+										value: reverb
+									});
+								});
 								break;
 							case 98:
 								nrpnLsb = mes[2];
@@ -1149,12 +1200,10 @@ var PicoAudio = (function(){
 						pitchBend = ((mes[2]*128+mes[1])-8192)/8192*dataEntry;
 						nowNoteOnIdxAry.forEach(function(idx){
 							var note = channel.notes[idx];
-							if(note.stop==null){
-								note.pitchBend.push({
-									timing: time,
-									value: pitchBend
-								});
-							}
+							note.pitchBend.push({
+								timing: time,
+								value: pitchBend
+							});
 						});
 						break;
 					case 0xF:
@@ -1169,12 +1218,10 @@ var PicoAudio = (function(){
 									masterVolume = vol;
 									nowNoteOnIdxAry.forEach(function(idx){
 										var note = channel.notes[idx];
-										if(note.stop==null){
-											note.expression.push({
-												timing: time,
-												value: expression*(masterVolume/127)
-											});
-										}
+										note.expression.push({
+											timing: time,
+											value: expression*(masterVolume/127)
+										});
 									});
 								}
 								break;
