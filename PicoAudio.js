@@ -49,7 +49,7 @@ var PicoAudio = (function(){
 		// リバーブ用（convolverは重いので１つだけ作成）
 		this.convolver = this.context.createConvolver();
 		this.convolver.buffer = this.impulseResponse;
-		//this.convolver.normalize = false;
+		this.convolver.normalize = false;
 		this.convolverGainNode = this.context.createGain();
 		this.convolverGainNode.gain.value = 1;
 		this.convolver.connect(this.convolverGainNode);
