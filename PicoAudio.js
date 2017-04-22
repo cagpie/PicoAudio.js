@@ -14,6 +14,7 @@ var PicoAudio = (function(){
 			WebMIDIPortOutputs: null,
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
+			isReverb: true,
 			loop: false
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ /*console.log("end")*/ } };
@@ -29,10 +30,10 @@ var PicoAudio = (function(){
 				this.whitenoise.getChannelData(ch)[i] = Math.random() * 2 - 1;
 			}
 		}
-		// リバーブ用のインパルス応答音声データ（てきとう）
+		// リバーブ用のインパルス応答音声データ作成（てきとう）
 		var sampleLength = this.context.sampleRate*4;
 		this.impulseResponse = this.context.createBuffer(2, sampleLength, this.context.sampleRate);
-		for (var ch = 0; ch<2; ch++) {
+		for(var ch = 0; ch<2; ch++){
 			var buf = this.impulseResponse.getChannelData(ch);
 			for (var i = 0; i<sampleLength; i++) {
 				var v = ((sampleLength-i)/sampleLength);
@@ -507,7 +508,7 @@ var PicoAudio = (function(){
 			modulationGainNode.connect(oscillator.frequency);
 		}
 		
-		if(option.reverb && (option.reverb.length >= 2 || option.reverb[0].value > 0)){
+		if(this.settings.isReverb && option.reverb && (option.reverb.length >= 2 || option.reverb[0].value > 0)){
 			var convolver = this.convolver;
 			var convolverGainNode = context.createGain();
 			firstPan = true;
@@ -792,6 +793,14 @@ var PicoAudio = (function(){
 			this.initStatus();
 			this.play();
 		}
+	};
+
+	PicoAudio.prototype.isReverb = function(){
+		return this.settings.isReverb;
+	};
+
+	PicoAudio.prototype.setReverb = function(enable){
+		this.settings.isReverb = enable;
 	};
 
 	PicoAudio.prototype.getTime = function(timing){
