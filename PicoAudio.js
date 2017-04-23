@@ -1,5 +1,5 @@
 var PicoAudio = (function(){
-	function PicoAudio(_audioContext){
+	function PicoAudio(_audioContext, _picoAudio){
 		var AudioContext = window.AudioContext || window.webkitAudioContext;
 		this.context = _audioContext ? _audioContext : new AudioContext();
 		this.settings = {
@@ -24,38 +24,49 @@ var PicoAudio = (function(){
 		this.tempoTrack = [{ timing:0, value:120 },{ timing:0, value:120 }];
 		for(var i=0; i<17; i++)
 			this.channels.push([0,0,1]);
-		this.whitenoise = this.context.createBuffer(2, this.context.sampleRate, this.context.sampleRate);
-		for (var ch=0; ch<2; ch++){
-			for (var i=0; i<this.context.sampleRate; i++){
-				this.whitenoise.getChannelData(ch)[i] = Math.random() * 2 - 1;
+		if(_picoAudio && _picoAudio.whitenoise){ // 使いまわし
+			this.whitenoise = _picoAudio.whitenoise;
+		} else {
+			this.whitenoise = this.context.createBuffer(2, this.context.sampleRate, this.context.sampleRate);
+			for (var ch=0; ch<2; ch++){
+				for (var i=0; i<this.context.sampleRate; i++){
+					this.whitenoise.getChannelData(ch)[i] = Math.random() * 2 - 1;
+				}
 			}
 		}
 		// リバーブ用のインパルス応答音声データ作成（てきとう）
-		var sampleLength = this.context.sampleRate*4;
-		this.impulseResponse = this.context.createBuffer(2, sampleLength, this.context.sampleRate);
-		for(var ch = 0; ch<2; ch++){
-			var buf = this.impulseResponse.getChannelData(ch);
-			for (var i = 0; i<sampleLength; i++) {
-				var v = ((sampleLength-i)/sampleLength);
-				var s = i/this.context.sampleRate;
-				var r = i/sampleLength;
-				var d = (s < 0.030 ? 0 : v)
-				*(s >= 0.030 && s < 0.031 ? v*2 : v)
-				*(s >= 0.040 && s < 0.042 ? v*1.5 : v)
-				*(s >= 0.050 && s < 0.054 ? v*1.25 : v)
-				*Math.random()*0.2*Math.pow((v-0.030), 4);
-				buf[i] = d;
+		if(_picoAudio && _picoAudio.impulseResponse){ // 使いまわし
+			this.impulseResponse = _picoAudio.impulseResponse;
+		} else {
+			var sampleLength = this.context.sampleRate*4;
+			this.impulseResponse = this.context.createBuffer(2, sampleLength, this.context.sampleRate);
+			for(var ch = 0; ch<2; ch++){
+				var buf = this.impulseResponse.getChannelData(ch);
+				for (var i = 0; i<sampleLength; i++) {
+					var v = ((sampleLength-i)/sampleLength);
+					var s = i/this.context.sampleRate;
+					var r = i/sampleLength;
+					var d = (s < 0.030 ? 0 : v)
+					*(s >= 0.030 && s < 0.031 ? v*2 : v)
+					*(s >= 0.040 && s < 0.042 ? v*1.5 : v)
+					*(s >= 0.050 && s < 0.054 ? v*1.25 : v)
+					*Math.random()*0.2*Math.pow((v-0.030), 4);
+					buf[i] = d;
+				}
 			}
 		}
 		// リバーブ用（convolverは重いので１つだけ作成）
-		this.convolver = this.context.createConvolver();
-		this.convolver.buffer = this.impulseResponse;
-		this.convolver.normalize = false;
-		this.convolverGainNode = this.context.createGain();
-		this.convolverGainNode.gain.value = 1;
-		this.convolver.connect(this.convolverGainNode);
-		this.convolverGainNode.connect(this.context.destination);
-		
+		if(_picoAudio && _picoAudio.convolver){ // 使いまわし
+			this.convolver = _picoAudio.convolver;
+		} else {
+			this.convolver = this.context.createConvolver();
+			this.convolver.buffer = this.impulseResponse;
+			this.convolver.normalize = false;
+			this.convolverGainNode = this.context.createGain();
+			this.convolverGainNode.gain.value = 1;
+			this.convolver.connect(this.convolverGainNode);
+			this.convolverGainNode.connect(this.context.destination);
+		}
 		this.onSongEndListener = null;
 	}
 
