@@ -15,6 +15,7 @@ var PicoAudio = (function(){
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
 			isReverb: true,
+			isChorus: true,
 			loop: false
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ /*console.log("end")*/ } };
@@ -195,6 +196,8 @@ var PicoAudio = (function(){
 */
 		return function(){
 			that.stopAudioNode(oscillator, 0);
+			that.disconnectAudioNode(gainNode, 0);
+			that.disconnectAudioNode(panNode, 0);
 		};
 	};
 
@@ -376,6 +379,10 @@ var PicoAudio = (function(){
 		return function(){
 			that.stopAudioNode(source, 0);
 			that.stopAudioNode(oscillator, 0);
+			that.disconnectAudioNode(gainNode, 0);
+			that.disconnectAudioNode(panNode, 0);
+			that.disconnectAudioNode(gainNode2, 0);
+			that.disconnectAudioNode(panNode2, 0);
 		};
 	};
 
@@ -542,8 +549,53 @@ var PicoAudio = (function(){
 			convolverGainNode.connect(convolver);
 		}
 		
-		if(modulationOscillator)
+		if(this.settings.isChorus && option.chorus && (option.chorus.length >= 2 || option.chorus[0].value > 0)){
+			var chorusDelayNode = context.createDelay();
+			var chorusGainNode = context.createGain();
+			var chorusOscillator = context.createOscillator();
+			var chorusLfoGainNode = context.createGain();
+			firstPan = true;
+			option.chorus ? option.chorus.forEach(function(p){
+				if(firstPan){
+					firstPan = false;
+					return;
+				}
+				var c = p.value / 127;
+				if(c > 1.0) c = 1.0;
+				chorusGainNode.gain.setValueAtTime(
+					c * 0.5 /* * gainNode.gain.value*/,
+					that.getTime(p.timing) + songStartTime
+				);
+			}) : false;
+			var c = option.chorus ? option.chorus[0].value / 127 : 0;
+			if(c > 1.0) c = 1.0;
+			var depthRate = 0.5;
+			chorusDelayNode.delayTime.value  = 0.020;
+			chorusLfoGainNode.gain.value = chorusDelayNode.delayTime.value * depthRate; 
+			chorusOscillator.frequency.value = 0.05; 
+			chorusGainNode.gain.value = c * 0.5/* * gainNode.gain.value*/;
+			chorusOscillator.connect(chorusLfoGainNode);
+			chorusLfoGainNode.connect(chorusDelayNode.delayTime);
+			oscillator.connect(chorusDelayNode);
+			chorusDelayNode.connect(chorusGainNode);
+			chorusGainNode.connect(gainNode);
+		}
+		
+		if(modulationOscillator){
 			modulationOscillator.start(start);
+ 			that.stopAudioNode(modulationOscillator, stop);
+ 			that.disconnectAudioNode(modulationGainNode, stop);
+		}
+		
+		if(chorusOscillator){
+			chorusOscillator.start(start);
+ 			that.stopAudioNode(chorusOscillator, stop);
+ 			// ↓これ入れないと音途切れる
+ 			that.disconnectAudioNode(chorusOscillator, stop);
+ 			that.disconnectAudioNode(chorusLfoGainNode, stop);
+ 			that.disconnectAudioNode(chorusDelayNode, stop);
+ 			that.disconnectAudioNode(chorusGainNode, stop);
+		}
 		
 		oscillator.start(start);
  		if(channel!=9 && !nonChannel)
@@ -814,6 +866,14 @@ var PicoAudio = (function(){
 		this.settings.isReverb = enable;
 	};
 
+	PicoAudio.prototype.isChorus = function(){
+		return this.settings.isChorus;
+	};
+
+	PicoAudio.prototype.setChorus = function(enable){
+		this.settings.isChorus = enable;
+	};
+
 	PicoAudio.prototype.getTime = function(timing){
 		var time = 0;
 		var tempo = 120;
@@ -1066,6 +1126,7 @@ var PicoAudio = (function(){
 			var velocity = 100;
 			var modulation = 0;
 			var reverb = 0;
+			var chorus = 0;
 			var nrpnLsb = 127;
 			var nrpnMsb = 127;
 			var rpnLsb = 127;
@@ -1106,6 +1167,7 @@ var PicoAudio = (function(){
 								velocity: (mes[2]/127)*(velocity/127),
 								modulation: [{timing:time,value:modulation}],
 								reverb: [{timing:time,value:reverb}],
+								chorus: [{timing:time,value:chorus}],
 								instrument: instrument,
 								channel: ch
 							};
@@ -1191,6 +1253,16 @@ var PicoAudio = (function(){
 									note.reverb.push({
 										timing: time,
 										value: reverb
+									});
+								});
+								break;
+							case 93:
+								chorus = mes[2];
+								nowNoteOnIdxAry.forEach(function(idx){
+									var note = channel.notes[idx];
+									note.chorus.push({
+										timing: time,
+										value: chorus
 									});
 								});
 								break;
@@ -1290,19 +1362,23 @@ var PicoAudio = (function(){
 			tar.stop(time);
 		} catch(e) {
 			// iOS
-			var disconnectFunc = function(){
-				try {
-					tar.disconnect();
-				} catch(e) {}
-			};
-			var waitTime = time - this.context.currentTime;
-			if(waitTime <= 0){
-				disconnectFunc();
-			} else {
-				setTimeout(disconnectFunc, waitTime * 1000);
-			}
+			this.disconnectAudioNode(tar, time);
 		}
 	};
+
+	PicoAudio.prototype.disconnectAudioNode = function(tar, time){
+		var disconnectFunc = function(){
+			try {
+				tar.disconnect();
+			} catch(e) {}
+		};
+		var waitTime = time - this.context.currentTime;
+		if(waitTime <= 0){
+			disconnectFunc();
+		} else {
+			setTimeout(disconnectFunc, waitTime * 1000);
+		}
+	}
 
 	PicoAudio.prototype.pushFunc = function(tar){
 		if(!tar.note && !tar.rootTimeout && !this.trigger.isNoteTrigger) return;
