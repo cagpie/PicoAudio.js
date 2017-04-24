@@ -14,8 +14,8 @@ var PicoAudio = (function(){
 			WebMIDIPortOutputs: null,
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
-			isReverb: true,
-			isChorus: true,
+			isReverb: false,
+			isChorus: false,
 			loop: false
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ /*console.log("end")*/ } };
@@ -563,7 +563,7 @@ var PicoAudio = (function(){
 				var c = p.value / 127;
 				if(c > 1.0) c = 1.0;
 				chorusGainNode.gain.setValueAtTime(
-					c * 0.5 /* * gainNode.gain.value*/,
+					c * 0.5,
 					that.getTime(p.timing) + songStartTime
 				);
 			}) : false;
@@ -573,7 +573,7 @@ var PicoAudio = (function(){
 			chorusDelayNode.delayTime.value  = 0.020;
 			chorusLfoGainNode.gain.value = chorusDelayNode.delayTime.value * depthRate; 
 			chorusOscillator.frequency.value = 0.05; 
-			chorusGainNode.gain.value = c * 0.5/* * gainNode.gain.value*/;
+			chorusGainNode.gain.value = c * 0.5;
 			chorusOscillator.connect(chorusLfoGainNode);
 			chorusLfoGainNode.connect(chorusDelayNode.delayTime);
 			oscillator.connect(chorusDelayNode);
