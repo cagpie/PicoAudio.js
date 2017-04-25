@@ -651,12 +651,14 @@ var PicoAudio = (function(){
 				this.settings.WebMIDIPortOutput.send([0xB0+t, 7, 100]);
 				this.settings.WebMIDIPortOutput.send([0xB0+t, 10, 64]);
 				this.settings.WebMIDIPortOutput.send([0xB0+t, 11, 127]);
+				this.settings.WebMIDIPortOutput.send([0xB0+t, 121, 0]);
 			}
 		}
 	};
 
 	PicoAudio.prototype.stop = function(){
 		var states = this.states;
+		var that = this;
 		if(states.isPlaying==false) return;
 		states.isPlaying = false;
 		states.playIndex -= this.settings.hashBuffer + 1;
@@ -671,6 +673,7 @@ var PicoAudio = (function(){
 			//this.settings.WebMIDIPortOutput.send([0xFC]);
 			setTimeout(function(){
 				for(var t=0; t<16; t++){
+					that.settings.WebMIDIPortOutput.send([0xB0+t, 120, 0]);
 					for(var i=0; i<128; i++){
 						that.settings.WebMIDIPortOutput.send([0x80+t, i, 0]);
 						//that.settings.WebMIDIPortOutput.send([0x80+t, i, 0], 500);
