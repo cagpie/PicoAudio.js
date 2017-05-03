@@ -18,6 +18,7 @@ var PicoAudio = (function(){
 			reverbVolume: 1.5,
 			isChorus: true,
 			chorusVolume: 0.5,
+			dramMaxPlayLength: 0.5, // ドラムで一番長い音の秒数
 			loop: false
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ /*console.log("end")*/ } };
@@ -152,7 +153,7 @@ var PicoAudio = (function(){
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+0.2);
-				that.stopAudioNode(oscillator, note.start+0.5);
+				that.stopAudioNode(oscillator, note.start+0.5, gainNode);
 				break;
 			}
 			// ピアノ程度に伸ばす系
@@ -191,7 +192,7 @@ var PicoAudio = (function(){
 			case 119:
 			{
 				gainNode.gain.value = 0;
-				that.stopAudioNode(oscillator, 0);
+				that.stopAudioNode(oscillator, 0, gainNode);
 			}
 			default:{
 				//gainNode.gain.setValueAtTime(note.velocity, note.start);
@@ -216,9 +217,7 @@ var PicoAudio = (function(){
 		oscillator.setPeriodicWave(wavtable);
 */
 		return function(){
-			that.stopAudioNode(oscillator, 0);
-			that.disconnectAudioNode(gainNode, 0);
-			that.disconnectAudioNode(panNode, 0);
+			that.stopAudioNode(oscillator, 0, gainNode);
 		};
 	};
 
@@ -242,127 +241,127 @@ var PicoAudio = (function(){
 				// w
 				gainNode.gain.value = velocity*0.6;
 				source.playbackRate.value = 0.02;
-				that.stopAudioNode(source, start+0.07);
+				that.stopAudioNode(source, start+0.07, gainNode);
 				// s
 				gainNode2.gain.value = velocity*1.1;
 				oscillator.frequency.setValueAtTime(120, start);
 				oscillator.frequency.linearRampToValueAtTime(50, start+0.07);
-				that.stopAudioNode(oscillator, start+0.07);
+				that.stopAudioNode(oscillator, start+0.07, gainNode2);
 				break;
 			// Snare
 			case 38:
 			case 40:
 				// w
 				source.playbackRate.value = 0.7;
-				that.stopAudioNode(source, start+0.05);
+				that.stopAudioNode(source, start+0.05, gainNode);
 				// s
 				gainNode2.gain.setValueAtTime(velocity*0.8, start);
 				gainNode2.gain.linearRampToValueAtTime(0.0, start+0.05);
 				oscillator.frequency.setValueAtTime(300, start);
 				oscillator.frequency.linearRampToValueAtTime(200, start+0.05);
-				that.stopAudioNode(oscillator, start+0.05);
+				that.stopAudioNode(oscillator, start+0.05, gainNode2);
 				break;
 			// Toms
 			case 41: case 43: case 45:
 			case 47: case 48: case 50:
 				// w
 				source.playbackRate.value = 0.01;
-				that.stopAudioNode(source, start+0.1);
+				that.stopAudioNode(source, start+0.1, gainNode);
 				// s
 				oscillator.type = "square";
 				gainNode2.gain.setValueAtTime(velocity, start);
 				gainNode2.gain.linearRampToValueAtTime(0.01, start+0.1);
 				oscillator.frequency.setValueAtTime(150+20*(option.pitch-40), start);
 				oscillator.frequency.linearRampToValueAtTime(50+20*(option.pitch-40), start+0.1);
-				that.stopAudioNode(oscillator, start+0.1);
+				that.stopAudioNode(oscillator, start+0.1, gainNode2);
 				break;
 			// Close Hihat
 			case 42:
 			case 44:
 				source.playbackRate.value = 1.5;
-				that.stopAudioNode(source, start+0.02);
-				that.stopAudioNode(oscillator, 0);
+				that.stopAudioNode(source, start+0.02, gainNode);
+				that.stopAudioNode(oscillator, 0, gainNode2);
 				break;
 			// Open Hihat
 			case 46:
 				source.playbackRate.value = 1.5;
-				that.stopAudioNode(source, start+0.3);
+				that.stopAudioNode(source, start+0.3, gainNode);
 				gainNode.gain.setValueAtTime(velocity*0.9, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.3);
-				that.stopAudioNode(oscillator, 0);
+				that.stopAudioNode(oscillator, 0, gainNode2);
 				break;
 			// Cymbal
 			case 49: case 51: case 52:
 			case 53: case 55: case 57:
 				source.playbackRate.value = 1.2;
-				that.stopAudioNode(source, start+0.5);
+				that.stopAudioNode(source, start+0.5, gainNode);
 				gainNode.gain.setValueAtTime(velocity*1, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.5);
-				that.stopAudioNode(oscillator, 0);
+				that.stopAudioNode(oscillator, 0, gainNode2);
 				break;
 			// Cymbal2
 			case 51:
 				source.playbackRate.value = 1.1;
-				that.stopAudioNode(source, start+0.4);
+				that.stopAudioNode(source, start+0.4, gainNode);
 				gainNode.gain.setValueAtTime(velocity*0.8, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.4);
-				that.stopAudioNode(oscillator, 0);
+				that.stopAudioNode(oscillator, 0, gainNode2);
 				break;
 			// Cymbal3
 			case 59:
 				source.playbackRate.value = 1.8;
-				that.stopAudioNode(source, start+0.3);
+				that.stopAudioNode(source, start+0.3, gainNode);
 				gainNode.gain.setValueAtTime(velocity*0.5, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.3);
-				that.stopAudioNode(oscillator, 0);
+				that.stopAudioNode(oscillator, 0, gainNode2);
 				break;
 			// Bongo
 			case 60: case 61:
 				// w
 				source.playbackRate.value = 0.03;
-				that.stopAudioNode(source, start+0.03);
+				that.stopAudioNode(source, start+0.03, gainNode);
 				// s
 				gainNode2.gain.setValueAtTime(velocity*0.8, start);
 				gainNode2.gain.linearRampToValueAtTime(0.0, start+0.1);
 				oscillator.frequency.setValueAtTime(400-40*(option.pitch-60), start);
 				oscillator.frequency.linearRampToValueAtTime(450-40*(option.pitch-60), start+0.1);
-				that.stopAudioNode(oscillator, start+0.1);
+				that.stopAudioNode(oscillator, start+0.1, gainNode2);
 				break;
 			// mute Conga
 			case 62:
 				// w
 				source.playbackRate.value = 0.03;
-				that.stopAudioNode(source, start+0.03);
+				that.stopAudioNode(source, start+0.03, gainNode);
 				// s
 				gainNode2.gain.setValueAtTime(velocity, start);
 				gainNode2.gain.linearRampToValueAtTime(0.0, start+0.03);
 				oscillator.frequency.setValueAtTime(200, start);
 				oscillator.frequency.linearRampToValueAtTime(250, start+0.03);
-				that.stopAudioNode(oscillator, start+0.03);
+				that.stopAudioNode(oscillator, start+0.03, gainNode2);
 				break;
 			// open Conga
 			case 63: case 64:
 				// w
 				source.playbackRate.value = 0.03;
-				that.stopAudioNode(source, start+0.03);
+				that.stopAudioNode(source, start+0.03, gainNode);
 				// s
 				gainNode2.gain.setValueAtTime(velocity, start);
 				gainNode2.gain.linearRampToValueAtTime(0.0, start+0.1);
 				oscillator.frequency.setValueAtTime(200-30*(option.pitch-63), start);
 				oscillator.frequency.linearRampToValueAtTime(250-30*(option.pitch-63), start+0.1);
-				that.stopAudioNode(oscillator, start+0.1);
+				that.stopAudioNode(oscillator, start+0.1, gainNode2);
 				break;
 			// Cowbell, Claves
 			case 56:
 			case 75:
 				// w
 				source.playbackRate.value = 0.01;
-				that.stopAudioNode(source, start+0.1);
+				that.stopAudioNode(source, start+0.1, gainNode);
 				// s
 				gainNode2.gain.setValueAtTime(velocity, start);
 				gainNode2.gain.linearRampToValueAtTime(0.0, start+0.1);
 				oscillator.frequency.setValueAtTime(1000+48*(option.pitch-56), start);
-				that.stopAudioNode(oscillator, start+0.1);
+				that.stopAudioNode(oscillator, start+0.1, gainNode2);
 				break;
 			// mute triangle
 			case 80:
@@ -370,13 +369,13 @@ var PicoAudio = (function(){
 				source.playbackRate.value = 5;
 				gainNode.gain.setValueAtTime(velocity*0.5, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.2);
-				that.stopAudioNode(source, start+0.05);
+				that.stopAudioNode(source, start+0.05, gainNode);
 				// s
 				oscillator.type = "triangle"
 				gainNode2.gain.setValueAtTime(velocity*0.7, start);
 				gainNode2.gain.linearRampToValueAtTime(0.0, start+0.2);
 				oscillator.frequency.setValueAtTime(6000, start);
-				that.stopAudioNode(oscillator, start+0.05);
+				that.stopAudioNode(oscillator, start+0.05, gainNode2);
 				break;
 			// open triangle
 			case 81:
@@ -384,26 +383,22 @@ var PicoAudio = (function(){
 				source.playbackRate.value = 5;
 				gainNode.gain.setValueAtTime(velocity*0.9, start);
 				gainNode.gain.linearRampToValueAtTime(0.0, start+0.5);
-				that.stopAudioNode(source, start+0.5);
+				that.stopAudioNode(source, start+0.5, gainNode);
 				// s
 				oscillator.type = "triangle"
 				gainNode2.gain.setValueAtTime(velocity*0.8, start);
 				gainNode2.gain.linearRampToValueAtTime(0.0, start+0.3);
 				oscillator.frequency.setValueAtTime(6000, start);
-				that.stopAudioNode(oscillator, start+0.3);
+				that.stopAudioNode(oscillator, start+0.3, gainNode2);
 				break;
 			default:
 				source.playbackRate.value = option.pitch/69*2;
-				that.stopAudioNode(source, start+0.05);
-				that.stopAudioNode(oscillator, 0);
+				that.stopAudioNode(source, start+0.05, gainNode);
+				that.stopAudioNode(oscillator, 0, gainNode2);
 		}
 		return function(){
-			that.stopAudioNode(source, 0);
-			that.stopAudioNode(oscillator, 0);
-			that.disconnectAudioNode(gainNode, 0);
-			that.disconnectAudioNode(panNode, 0);
-			that.disconnectAudioNode(gainNode2, 0);
-			that.disconnectAudioNode(panNode2, 0);
+			that.stopAudioNode(source, 0, gainNode);
+			that.stopAudioNode(oscillator, 0, gainNode2);
 		};
 	};
 
@@ -595,21 +590,12 @@ var PicoAudio = (function(){
 		
 		if(modulationOscillator){
 			modulationOscillator.start(start);
-			this.stopAudioNode(modulationOscillator, stop);
-			this.disconnectAudioNode(modulationGainNode, stop);
-		}
-		
-		if(convolverGainNode){
-			this.disconnectAudioNode(convolverGainNode, stop);
-		}
-		
-		if(chorusGainNode){
-			this.disconnectAudioNode(chorusGainNode, stop);
+			this.stopAudioNode(modulationOscillator, stop, modulationGainNode);
 		}
 		
 		oscillator.start(start);
 		if(channel!=9 && !nonChannel)
-			this.stopAudioNode(oscillator, stop);
+			this.stopAudioNode(oscillator, stop, gainNode);
 		
 		return {
 			start: start,
@@ -706,21 +692,23 @@ var PicoAudio = (function(){
 		states.startTime = !states.startTime && !states.stopTime ? this.context.currentTime : (states.startTime + this.context.currentTime - states.stopTime);
 		states.stopFuncs = [];
 		// 曲終了コールバックを予約
+		var reserveSongEnd;
 		var reserveSongEndFunc = function(){
+			that.clearFunc("rootTimeout", reserveSongEnd);
 			if (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime <= 0) {
 				// 予定の時間以降に曲終了
 				that.onSongEnd();
 			} else {
 				// 処理落ちしたりしてまだ演奏中の場合、1ms後に曲終了コールバックを呼び出すよう予約
-				var reserveSongEndAgain = setTimeout(reserveSongEndFunc, 1);
+				reserveSongEnd = setTimeout(reserveSongEndFunc, 1);
 				that.pushFunc({
-					rootTimeout: reserveSongEndAgain,
+					rootTimeout: reserveSongEnd,
 					stopFunc: function(){ clearTimeout(reserveSongEndAgain); }
 				});
 			}
 		};
 		var reserveSongEndTime = (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime) * 1000;
-		var reserveSongEnd = setTimeout(reserveSongEndFunc, reserveSongEndTime);
+		reserveSongEnd = setTimeout(reserveSongEndFunc, reserveSongEndTime);
 		that.pushFunc({
 			rootTimeout: reserveSongEnd,
 			stopFunc: function(){ clearTimeout(reserveSongEnd); }
@@ -746,7 +734,7 @@ var PicoAudio = (function(){
 								that.clearFunc("timeout", noteOff);
 								that.clearFunc("note", note);
 								if(trigger.isNoteTrigger) trigger.noteOff(note);
-							}, note.channel!=9 ? (that.getTime(note.stop) - that.getTime(note.start)) * 1000 : 700);
+							}, note.channel!=9 ? (that.getTime(note.stop) - that.getTime(note.start)) * 1000 : that.settings.dramMaxPlayLength * 1000);
 							that.pushFunc({
 								timeout: noteOff,
 								stopFunc: function(){ clearTimeout(noteOff); }
@@ -1387,26 +1375,13 @@ var PicoAudio = (function(){
 		return data;
 	};
 
-	PicoAudio.prototype.stopAudioNode = function(tar, time){
+	PicoAudio.prototype.stopAudioNode = function(tar, time, gainNode){
 		try{
 			tar.stop(time);
 		} catch(e) {
 			// iOS
-		}
-		this.disconnectAudioNode(tar, time);
-	};
-
-	PicoAudio.prototype.disconnectAudioNode = function(tar, time){
-		var disconnectFunc = function(){
-			try{
-				tar.disconnect();
-			} catch(e) {}
-		};
-		var waitTime = time - this.context.currentTime;
-		if(waitTime <= 0){
-			disconnectFunc();
-		} else {
-			setTimeout(disconnectFunc, waitTime * 1000);
+			gainNode.gain.cancelScheduledValues(time);
+			gainNode.gain.setValueAtTime(0, time);
 		}
 	};
 
