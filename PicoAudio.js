@@ -10,10 +10,10 @@ var PicoAudio = (function(){
 			hashLength: 1000,
 			hashBuffer: 1,
 			isWebMIDI: false,
-			isPlayWebMIDI: false,
 			WebMIDIPortOutputs: null,
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
+			WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）
 			isReverb: true,
 			reverbVolume: 1.5,
 			isChorus: true,
@@ -22,7 +22,7 @@ var PicoAudio = (function(){
 			loop: false
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){ /*console.log("end")*/ } };
-		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
+		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
 		this.hashedDataList = [];
 		this.channels = [];
 		this.tempoTrack = [{ timing:0, value:120 },{ timing:0, value:120 }];
@@ -614,41 +614,71 @@ var PicoAudio = (function(){
 		var that = this;
 		if(!navigator.requestMIDIAccess)
 			return;
-		navigator.requestMIDIAccess()
-			.then(function(midiAccess){
-					outputs = midiAccess.outputs;
-					that.settings.WebMIDIPortOutputs = outputs;
-					var output;
-					if(that.settings.WebMIDIPort==-1){
-						that.settings.WebMIDIPortOutputs.forEach(function(o){
-							if (!output) output = o;
-						});
-					} else {
-						output = that.settings.WebMIDIPortOutputs.get(settings.WebMIDIPort);
-					}
-					//console.log(output);
-					that.settings.WebMIDIPortOutput = output;
-					return outputs;
-			})
-			.catch(function(err){
-					console.log(err);
-			});
+		// 1回目：ブラウザにMIDIデバイスのフルコントロールを要求する(SysExの使用を要求)
+		// 2回目：MIDIデバイスのフルコントロールがブロックされたら、SysEx無しでMIDIアクセスを要求する
+		var sysEx = this.settings.WebMIDIPortSysEx;
+		var midiAccessSuccess = function(midiAccess){
+			outputs = midiAccess.outputs;
+			that.settings.WebMIDIPortOutputs = outputs;
+			var output;
+			if(that.settings.WebMIDIPort==-1){
+				that.settings.WebMIDIPortOutputs.forEach(function(o){
+					if(!output) output = o;
+				});
+			} else {
+				output = that.settings.WebMIDIPortOutputs.get(settings.WebMIDIPort);
+			}
+			that.settings.WebMIDIPortOutput = output;
+			that.settings.WebMIDIPortSysEx = sysEx;
+			if(output){
+				output.open();
+				that.initStatus(); // リセットイベント（GMシステム・オン等）を送るため呼び出す
+			}
+			return outputs;
+		};
+		var midiAccessFailure = function(err){
+			console.log(err);
+			if(sysEx){
+				sysEx = false;
+				navigator.requestMIDIAccess({sysex: sysEx})
+					.then(midiAccessSuccess)
+					.catch(midiAccessFailure);
+			}
+		};
+		navigator.requestMIDIAccess({sysex: sysEx})
+			.then(midiAccessSuccess)
+			.catch(midiAccessFailure);
 	};
 
 	PicoAudio.prototype.initStatus = function(){
+		if(this.settings.isWebMIDI){ // initStatus()連打の対策
+			if(this.states.webMIDIWaitState!=null) return;
+		}
 		this.stop();
-		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[] };
-		if(this.settings.isWebMIDI && this.settings.isPlayWebMIDI){
-			this.startWebMIDI();
-			if(this.settings.WebMIDIPortOutput==null)
+		var tempwebMIDIStopTime = this.states.webMIDIStopTime;
+		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
+		this.states.webMIDIStopTime = tempwebMIDIStopTime; // 値を初期化しない
+		if(this.settings.isWebMIDI){
+			if(this.settings.WebMIDIPortOutput==null){
+				this.startWebMIDI();
 				return;
-			for(var t=0; t<16; t++){
-				this.settings.WebMIDIPortOutput.send([0xE0+t, 0, 64]);
-				this.settings.WebMIDIPortOutput.send([0xB0+t, 6, 0]);
-				this.settings.WebMIDIPortOutput.send([0xB0+t, 7, 100]);
-				this.settings.WebMIDIPortOutput.send([0xB0+t, 10, 64]);
-				this.settings.WebMIDIPortOutput.send([0xB0+t, 11, 127]);
-				this.settings.WebMIDIPortOutput.send([0xB0+t, 121, 0]);
+			}
+			if(this.settings.WebMIDIPortSysEx){
+				// GM1システム・オン
+				this.settings.WebMIDIPortOutput.send([0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7]);
+			} else {
+				// SysExの使用が拒否されているので、できる限り設定値を初期値に戻す
+				for(var t=0; t<16; t++){
+					this.settings.WebMIDIPortOutput.send([0xC0+t, 0]);
+					this.settings.WebMIDIPortOutput.send([0xE0+t, 0, 64]);
+					this.settings.WebMIDIPortOutput.send([0xB0+t, 6, 0]);
+					this.settings.WebMIDIPortOutput.send([0xB0+t, 7, 100]);
+					this.settings.WebMIDIPortOutput.send([0xB0+t, 10, 64]);
+					this.settings.WebMIDIPortOutput.send([0xB0+t, 11, 127]);
+					//this.settings.WebMIDIPortOutput.send([0xB0+t, 91, 40]); // リバーブ以外のエフェクトに設定される場合がありそうなのでコメントアウト
+					//this.settings.WebMIDIPortOutput.send([0xB0+t, 93, 0]); // コーラス以外のエフェクトに設定されるのか音が出なくなる場合があるのでコメントアウト
+					this.settings.WebMIDIPortOutput.send([0xB0+t, 121, 0]);
+				}
 			}
 		}
 	};
@@ -664,16 +694,15 @@ var PicoAudio = (function(){
 			n.stopFunc();
 		});
 		states.stopFuncs = [];
-		if(this.settings.isWebMIDI && this.settings.isPlayWebMIDI){
+		if(this.settings.isWebMIDI){
 			if(this.settings.WebMIDIPortOutput==null)
 				return;
-			//this.settings.WebMIDIPortOutput.send([0xFC]);
+			states.webMIDIStopTime = this.context.currentTime;
 			setTimeout(function(){
 				for(var t=0; t<16; t++){
 					that.settings.WebMIDIPortOutput.send([0xB0+t, 120, 0]);
 					for(var i=0; i<128; i++){
 						that.settings.WebMIDIPortOutput.send([0x80+t, i, 0]);
-						//that.settings.WebMIDIPortOutput.send([0x80+t, i, 0], 500);
 					}
 				}
 			}, 200);
@@ -688,6 +717,25 @@ var PicoAudio = (function(){
 		var hashedDataList = this.hashedDataList;
 		var that = this;
 		if(states.isPlaying==true) return;
+		if(settings.isWebMIDI){
+			// Web MIDI API使用時はstop()から1秒程待機すると音がバグりにくい
+			if(states.webMIDIWaitState != "completed"){
+				if(states.webMIDIWaitState != "waiting"){ // play()連打の対策
+					// stop()から800ms後にplay()を実行
+					states.webMIDIWaitState = "waiting";
+					var waitTime = 800 - (context.currentTime - states.webMIDIStopTime)*1000;
+					if(states.webMIDIStopTime==0) waitTime = 800; // MIDI Portをopenして最初に呼び出すときも少し待つ
+					setTimeout(function(){
+						that.states.webMIDIWaitState = "completed";
+						that.states.isPlaying = false;
+						that.play();
+					}, waitTime);
+				}
+				return;
+			} else {
+				states.webMIDIWaitState = null;
+			}
+		}
 		states.isPlaying = true;
 		states.startTime = !states.startTime && !states.stopTime ? this.context.currentTime : (states.startTime + this.context.currentTime - states.stopTime);
 		states.stopFuncs = [];
@@ -713,15 +761,10 @@ var PicoAudio = (function(){
 			rootTimeout: reserveSongEnd,
 			stopFunc: function(){ clearTimeout(reserveSongEnd); }
 		});
-		if(settings.isWebMIDI && settings.isPlayWebMIDI){
-			if(settings.WebMIDIPortOutput!=null){
-				//settings.WebMIDIPortOutput.send([0xFA]);
-			}
-		}
 		(function playHash(idx){
 			states.playIndex = idx;
 			if(hashedDataList && hashedDataList[idx]){
-				if(!settings.isWebMIDI || !settings.isPlayWebMIDI){
+				if(!settings.isWebMIDI){
 					hashedDataList[idx].forEach(function(note){
 						that.pushFunc({
 							note: note,
@@ -748,11 +791,11 @@ var PicoAudio = (function(){
 				} else {
 					hashedDataList[idx].forEach(function(message){
 						if(settings.WebMIDIPortOutput!=null){
-							if(message.message[0]!=0xf0 && message.message[0]!=0xff){
+							if(message.message[0]!=0xff && (that.settings.WebMIDIPortSysEx || (message.message[0]!=0xf0 && message.message[0]!=0xf7))){
 								try{
 									settings.WebMIDIPortOutput.send(message.message, (that.getTime(message.timing) - context.currentTime +window.performance.now()/1000 + states.startTime) * 1000);
 								}catch(e){
-									console.log(message.message);
+									console.log(e, message.message);
 								}
 							}
 						}
@@ -785,7 +828,7 @@ var PicoAudio = (function(){
 		this.tempoTrack = data.tempoTrack;
 		var that = this;
 		var hashedDataList = [];
-		if(!this.settings.isWebMIDI || !this.settings.isPlayWebMIDI){
+		if(!this.settings.isWebMIDI){
 			data.channels.forEach(function(channel){
 				channel.notes.forEach(function(note){
 					var option = note;
@@ -830,14 +873,6 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.setWebMIDI = function(enable){
 		this.settings.isWebMIDI = enable;
-	};
-
-	PicoAudio.prototype.getPlayWebMIDI = function(){
-		return this.settings.isPlayWebMIDI;
-	};
-
-	PicoAudio.prototype.setPlayWebMIDI = function(enable){
-		this.settings.isPlayWebMIDI = enable;
 	};
 
 	PicoAudio.prototype.setStartTime = function(offset){
@@ -1111,20 +1146,22 @@ var PicoAudio = (function(){
 				if(this.settings.isWebMIDI){
 					if(lastState!=null){
 						var state = smf[cashP];
-//						if(state==0xF0 || state==0xF7){
-//							// 長さ情報を取り除いて純粋なSysExメッセージにする
-//							var lengthAry = variableLengthToInt(smf.subarray(cashP+1, cashP+1+4));
-//							var sysExStartP = cashP+1+lengthAry[1];
-//							var sysExEndP = sysExStartP+lengthAry[0];
-//							var webMIDIMes = new Uint8Array(1 + lengthAry[0]);
-//							webMIDIMes[0] = state;
-//							var size = sysExEndP - sysExStartP;
-//							for (var i=0; i<size; i++)
-//								webMIDIMes[i+1] = smf[sysExStartP + i];
-//							messages.push({ message: webMIDIMes, timing: time });
-//						} else {
+						if(state==0xF0 || state==0xF7){
+							if(this.settings.WebMIDIPortSysEx){
+								// 長さ情報を取り除いて純粋なSysExメッセージにする
+								var lengthAry = variableLengthToInt(smf.subarray(cashP+1, cashP+1+4));
+								var sysExStartP = cashP+1+lengthAry[1];
+								var sysExEndP = sysExStartP+lengthAry[0];
+								var webMIDIMes = new Uint8Array(1 + lengthAry[0]);
+								webMIDIMes[0] = state;
+								var size = sysExEndP - sysExStartP;
+								for (var i=0; i<size; i++)
+									webMIDIMes[i+1] = smf[sysExStartP + i];
+								messages.push({ message: webMIDIMes, timing: time });
+							}
+						} else {
 							messages.push({ message: smf.subarray(cashP, p), timing: time });
-//						}
+						}
 					}
 				}
 			}
