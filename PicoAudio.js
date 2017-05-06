@@ -42,7 +42,7 @@ var PicoAudio = (function(){
 		if(_picoAudio && _picoAudio.impulseResponse){ // 使いまわし
 			this.impulseResponse = _picoAudio.impulseResponse;
 		} else {
-			var sampleLength = this.context.sampleRate*4;
+			var sampleLength = this.context.sampleRate*3.5;
 			this.impulseResponse = this.context.createBuffer(2, sampleLength, this.context.sampleRate);
 			for(var ch = 0; ch<2; ch++){
 				var buf = this.impulseResponse.getChannelData(ch);
