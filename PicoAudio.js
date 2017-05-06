@@ -18,6 +18,7 @@ var PicoAudio = (function(){
 			reverbVolume: 1.5,
 			isChorus: true,
 			chorusVolume: 0.5,
+			isCC111: true,
 			dramMaxPlayLength: 0.5, // ドラムで一番長い音の秒数
 			loop: false
 		};
@@ -26,6 +27,7 @@ var PicoAudio = (function(){
 		this.hashedDataList = [];
 		this.channels = [];
 		this.tempoTrack = [{ timing:0, value:120 },{ timing:0, value:120 }];
+		this.cc111Time = -1;
 		for(var i=0; i<17; i++)
 			this.channels.push([0,0,1]);
 		if(_picoAudio && _picoAudio.whitenoise){ // 使いまわし
@@ -718,7 +720,7 @@ var PicoAudio = (function(){
 		var that = this;
 		if(states.isPlaying==true) return;
 		if(settings.isWebMIDI){
-			// Web MIDI API使用時はstop()から1秒程待機すると音がバグりにくい
+			// Web MIDI API使用時はstop()から800ms程待機すると音がバグりにくい
 			if(states.webMIDIWaitState != "completed"){
 				if(states.webMIDIWaitState != "waiting"){ // play()連打の対策
 					// stop()から800ms後にplay()を実行
@@ -743,7 +745,8 @@ var PicoAudio = (function(){
 		var reserveSongEnd;
 		var reserveSongEndFunc = function(){
 			that.clearFunc("rootTimeout", reserveSongEnd);
-			if (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime <= 0) {
+			var finishTime = (that.settings.isCC111 && that.cc111Time != -1) ? that.getTime(that.lastNoteOffTiming) : that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER));
+			if (finishTime - context.currentTime + states.startTime <= 0) {
 				// 予定の時間以降に曲終了
 				that.onSongEnd();
 			} else {
@@ -755,7 +758,8 @@ var PicoAudio = (function(){
 				});
 			}
 		};
-		var reserveSongEndTime = (that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER)) - context.currentTime + states.startTime) * 1000;
+		var finishTime = (this.settings.isCC111 && this.cc111Time != -1) ? this.getTime(this.lastNoteOffTiming) : this.getTime(this.getTiming(Number.MAX_SAFE_INTEGER));
+		var reserveSongEndTime = (finishTime - context.currentTime + states.startTime) * 1000;
 		reserveSongEnd = setTimeout(reserveSongEndFunc, reserveSongEndTime);
 		that.pushFunc({
 			rootTimeout: reserveSongEnd,
@@ -826,6 +830,9 @@ var PicoAudio = (function(){
 		this.settings.resolution = data.header.resolution;
 		this.settings.tempo = data.tempo || 120; 
 		this.tempoTrack = data.tempoTrack;
+		this.cc111Time = data.cc111Time;
+		this.firstNoteOnTiming = data.firstNoteOnTiming;
+		this.lastNoteOffTiming = data.lastNoteOffTiming;
 		var that = this;
 		var hashedDataList = [];
 		if(!this.settings.isWebMIDI){
@@ -891,6 +898,9 @@ var PicoAudio = (function(){
 		}
 		if(this.settings.loop){
 			this.initStatus();
+			if(this.settings.isCC111 && this.cc111Time != -1){
+				this.setStartTime(this.getTime(this.cc111Time));
+			}
 			this.play();
 		}
 	};
@@ -977,6 +987,9 @@ var PicoAudio = (function(){
 		var tempoTrack = new Array();
 		var beatTrack = new Array();
 		var channels = new Array();
+		var cc111Time = -1;
+		var firstNoteOnTiming = Number.MAX_SAFE_INTEGER; // 最初のノートオンのTick
+		var lastNoteOffTiming = 0; // 最後のノートオフのTick
 		for(var i=0; i<16; i++){
 			var channel = new Object();
 			channels.push(channel);
@@ -1204,6 +1217,9 @@ var PicoAudio = (function(){
 							if(note.pitch==mes[1] && note.stop==null){
 								note.stop = time;
 								nowNoteOnIdxAry.splice(i, 1);
+								if(time > lastNoteOffTiming){
+									lastNoteOffTiming = time;
+								}
 								return true;
 							}
 							i++;
@@ -1228,6 +1244,9 @@ var PicoAudio = (function(){
 							};
 							nowNoteOnIdxAry.push(channel.notes.length);
 							channel.notes.push(note);
+							if(time < firstNoteOnTiming){
+								firstNoteOnTiming = time;
+							}
 						} else {
 							var i=0;
 							nowNoteOnIdxAry.some(function(idx){
@@ -1235,6 +1254,9 @@ var PicoAudio = (function(){
 								if(note.pitch==mes[1] && note.stop==null){
 									note.stop = time;
 									nowNoteOnIdxAry.splice(i, 1);
+									if(time > lastNoteOffTiming){
+										lastNoteOffTiming = time;
+									}
 									return true;
 								}
 								i++;
@@ -1333,6 +1355,11 @@ var PicoAudio = (function(){
 							case 101:
 								rpnMsb = mes[2];
 								break;
+							case 111: // RPGツクール用ループ
+								if(cc111Time == -1){
+									cc111Time = time;
+								}
+								break;
 						}
 						break;
 					// Program Change - C[ch],
@@ -1389,6 +1416,9 @@ var PicoAudio = (function(){
 		data.beatTrack = beatTrack;
 		data.channels = channels;
 		data.songLength = songLength;
+		data.cc111Time = cc111Time;
+		data.firstNoteOnTiming = firstNoteOnTiming;
+		data.lastNoteOffTiming = lastNoteOffTiming;
 		if(this.settings.isWebMIDI) data.messages = messages;
 		
 		function getInt(arr){
