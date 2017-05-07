@@ -878,12 +878,20 @@ var PicoAudio = (function(){
 		this.settings.loop = loop;
 	};
 
-	PicoAudio.prototype.getWebMIDI = function(){
+	PicoAudio.prototype.isWebMIDI = function(){
 		return this.settings.isWebMIDI;
 	};
 
 	PicoAudio.prototype.setWebMIDI = function(enable){
 		this.settings.isWebMIDI = enable;
+	};
+
+	PicoAudio.prototype.isCC111 = function(){
+		return this.settings.isCC111;
+	};
+
+	PicoAudio.prototype.setCC111 = function(enable){
+		this.settings.isCC111 = enable;
 	};
 
 	PicoAudio.prototype.setStartTime = function(offset){
