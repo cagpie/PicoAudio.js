@@ -925,12 +925,12 @@ var PicoAudio = (function(){
 		this.settings.isReverb = enable;
 	};
 
-	PicoAudio.prototype.getReverbVoumue = function(){
-		return this.settings.reverbVoume;
+	PicoAudio.prototype.getReverbVolume = function(){
+		return this.settings.reverbVolume;
 	};
 
-	PicoAudio.prototype.setReverbVoumue = function(volume){
-		this.settings.reverbVoume = volume;
+	PicoAudio.prototype.setReverbVolume = function(volume){
+		this.settings.reverbVolume = volume;
 	};
 
 	PicoAudio.prototype.isChorus = function(){
@@ -941,12 +941,12 @@ var PicoAudio = (function(){
 		this.settings.isChorus = enable;
 	};
 
-	PicoAudio.prototype.getChorusVoumue = function(){
-		return this.settings.chorusVoume;
+	PicoAudio.prototype.getChorusVolume = function(){
+		return this.settings.chorusVolume;
 	};
 
-	PicoAudio.prototype.setChorusVoumue = function(volume){
-		this.settings.chorusVoume = volume;
+	PicoAudio.prototype.setChorusVolume = function(volume){
+		this.settings.chorusVolume = volume;
 	};
 
 	PicoAudio.prototype.isAndroid = function(){
