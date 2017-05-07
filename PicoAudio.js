@@ -14,7 +14,7 @@ var PicoAudio = (function(){
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
 			WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）
-			isReverb: true,
+			isReverb: !this.isAndroid(), // Android以外はリバーブON
 			reverbVolume: 1.5,
 			isChorus: true,
 			chorusVolume: 0.5,
@@ -939,6 +939,11 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.setChorusVoumue = function(volume){
 		this.settings.chorusVoume = volume;
+	};
+
+	PicoAudio.prototype.isAndroid = function(){
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("android") != -1 && u.indexOf("windows") == -1;
 	};
 
 	PicoAudio.prototype.getTime = function(timing){
