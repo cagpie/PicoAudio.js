@@ -652,15 +652,17 @@ var PicoAudio = (function(){
 			.catch(midiAccessFailure);
 	};
 
-	PicoAudio.prototype.initStatus = function(){
+	PicoAudio.prototype.initStatus = function(isSongLooping){
 		if(this.settings.isWebMIDI){ // initStatus()連打の対策
 			if(this.states.webMIDIWaitState!=null) return;
 		}
-		this.stop();
+		this.stop(isSongLooping);
 		var tempwebMIDIStopTime = this.states.webMIDIStopTime;
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
 		this.states.webMIDIStopTime = tempwebMIDIStopTime; // 値を初期化しない
 		if(this.settings.isWebMIDI){
+			if(isSongLooping)
+				return;
 			if(this.settings.WebMIDIPortOutput==null){
 				this.startWebMIDI();
 				return;
@@ -685,7 +687,7 @@ var PicoAudio = (function(){
 		}
 	};
 
-	PicoAudio.prototype.stop = function(){
+	PicoAudio.prototype.stop = function(isSongLooping){
 		var states = this.states;
 		var that = this;
 		if(states.isPlaying==false) return;
@@ -697,6 +699,8 @@ var PicoAudio = (function(){
 		});
 		states.stopFuncs = [];
 		if(this.settings.isWebMIDI){
+			if(isSongLooping)
+				return;
 			if(this.settings.WebMIDIPortOutput==null)
 				return;
 			states.webMIDIStopTime = this.context.currentTime;
@@ -711,7 +715,7 @@ var PicoAudio = (function(){
 		}
 	};
 
-	PicoAudio.prototype.play = function(){
+	PicoAudio.prototype.play = function(isSongLooping){
 		var context = this.context;
 		var settings = this.settings;
 		var trigger = this.trigger;
@@ -719,7 +723,7 @@ var PicoAudio = (function(){
 		var hashedDataList = this.hashedDataList;
 		var that = this;
 		if(states.isPlaying==true) return;
-		if(settings.isWebMIDI){
+		if(settings.isWebMIDI && !isSongLooping){
 			// Web MIDI API使用時はstop()から800ms程待機すると音がバグりにくい
 			if(states.webMIDIWaitState != "completed"){
 				if(states.webMIDIWaitState != "waiting"){ // play()連打の対策
@@ -897,11 +901,11 @@ var PicoAudio = (function(){
 			if(isStopFunc) return;
 		}
 		if(this.settings.loop){
-			this.initStatus();
+			this.initStatus(true);
 			if(this.settings.isCC111 && this.cc111Time != -1){
 				this.setStartTime(this.getTime(this.cc111Time));
 			}
-			this.play();
+			this.play(true);
 		}
 	};
 
