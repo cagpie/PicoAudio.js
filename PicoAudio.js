@@ -1052,9 +1052,10 @@ var PicoAudio = (function(){
 			while(p<endPoint){
 				// DeltaTime
 				if(lastState!=null){
-					var lengthAry = variableLengthToInt(smf.subarray(p, p+4));
+					var lengthAry = variableLengthToInt(smf.subarray(p, p+5));
 					var dt = lengthAry[0];
 					time += dt;
+					if(time>100000000) time = 100000000; // 長すぎる曲は途中で打ち切る(PicotuneのCanvas生成で時間がかかるため)
 					p += lengthAry[1];
 				}
 				// WebMIDIAPI
@@ -1470,7 +1471,7 @@ var PicoAudio = (function(){
 			var i = 0;
 			var value = 0;
 			while(i<arr.length-1 && arr[i]>=0x80){
-				value = (value<<7) + (arr[i]-0x80);
+				if (i < 4) value = (value<<7) + (arr[i]-0x80);
 				i++;
 			}
 			value = (value<<7) + arr[i];
