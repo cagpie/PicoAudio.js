@@ -96,7 +96,14 @@ var PicoAudio = (function(){
 	}
 
 	PicoAudio.prototype.createNote = function(option){
-		var note = this.createBaseNote(option, true);
+		var nonStop = false;
+		switch((option.channel && this.channels[option.channel][1]/10) || option.instrument){
+			case 0.2:
+			case 12: case 13: case 45: case 55:
+				nonStop = true;
+				break; // ピッチカート系減衰は後でstopさせる
+		}
+		var note = this.createBaseNote(option, true, false, nonStop);
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
 		var panNode = note.panNode;
@@ -413,7 +420,7 @@ var PicoAudio = (function(){
 		};
 	};
 
-	PicoAudio.prototype.createBaseNote = function(option, isExpression, nonChannel){
+	PicoAudio.prototype.createBaseNote = function(option, isExpression, nonChannel, nonStop){
 		var settings = this.settings;
 		var context = this.context;
 		var songStartTime = this.states.startTime;
@@ -607,15 +614,8 @@ var PicoAudio = (function(){
 		}
 		
 		oscillator.start(start);
-		if(channel!=9 && !nonChannel){
-			switch((option.channel && this.channels[option.channel][1]/10) || option.instrument){
-				case 0.2:
-				case 12: case 13: case 45: case 55:
-					break; // ピッチカート系減衰は後でstopさせる
-				default:
-					this.stopAudioNode(oscillator, stop, gainNode);
-					break;
-			}
+		if(channel!=9 && !nonChannel && !nonStop){
+			this.stopAudioNode(oscillator, stop, gainNode);
 		}
 		
 		return {
