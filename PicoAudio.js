@@ -96,10 +96,19 @@ var PicoAudio = (function(){
 	}
 
 	PicoAudio.prototype.createNote = function(option){
-		var note = this.createBaseNote(option, true);
+		var nonStop = false;
+		switch((option.channel && this.channels[option.channel][1]/10) || option.instrument){
+			case 0.2:
+			case 12: case 13: case 45: case 55:
+				nonStop = true;
+				break; // ピッチカート系減衰は後でstopさせる
+		}
+		var note = this.createBaseNote(option, true, false, nonStop);
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
 		var panNode = note.panNode;
+		var noiseCutGainNode = note.noiseCutGainNode;
+		var isPizzicato = false;
 		var that = this;
 		// 音色別の音色振り分け 書き方(ry
 		switch(this.channels[note.channel][0]/10 || option.instrument){
@@ -152,6 +161,7 @@ var PicoAudio = (function(){
 			case 0.2:
 			case 12: case 13: case 45: case 55:
 			{
+				isPizzicato = true;
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+0.2);
@@ -201,6 +211,12 @@ var PicoAudio = (function(){
 			}
 		}
 
+		if((oscillator.type == "sine" || oscillator.type == "triangle")
+			&& !isPizzicato && note.stop - note.start > 0.1){
+			// 終わり際に少し減衰しノイズ削減
+			noiseCutGainNode.gain.setValueAtTime(1, note.stop-0.005);
+			noiseCutGainNode.gain.linearRampToValueAtTime(0, note.stop);
+		}
 /*
 		var real = new Float32Array(10);
 		var imag = new Float32Array(10);
@@ -404,7 +420,7 @@ var PicoAudio = (function(){
 		};
 	};
 
-	PicoAudio.prototype.createBaseNote = function(option, isExpression, nonChannel){
+	PicoAudio.prototype.createBaseNote = function(option, isExpression, nonChannel, nonStop){
 		var settings = this.settings;
 		var context = this.context;
 		var songStartTime = this.states.startTime;
@@ -417,6 +433,7 @@ var PicoAudio = (function(){
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var gainNode = context.createGain();
+		var noiseCutGainNode = context.createGain();
 		var that = this;
 		
 		if(!context.createStereoPanner && context.createPanner) {
@@ -518,7 +535,8 @@ var PicoAudio = (function(){
 		} else {
 			oscillator.connect(gainNode);
 		}
-		gainNode.connect(context.destination);
+		gainNode.connect(noiseCutGainNode);
+		noiseCutGainNode.connect(context.destination);
 		
 		if(channel!=9 && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
 			var modulationOscillator = context.createOscillator();
@@ -596,8 +614,9 @@ var PicoAudio = (function(){
 		}
 		
 		oscillator.start(start);
-		if(channel!=9 && !nonChannel)
+		if(channel!=9 && !nonChannel && !nonStop){
 			this.stopAudioNode(oscillator, stop, gainNode);
+		}
 		
 		return {
 			start: start,
@@ -607,7 +626,8 @@ var PicoAudio = (function(){
 			velocity: velocity,
 			oscillator: oscillator,
 			panNode: panNode,
-			gainNode: gainNode
+			gainNode: gainNode,
+			noiseCutGainNode: noiseCutGainNode
 		};
 	};
 
@@ -801,7 +821,8 @@ var PicoAudio = (function(){
 						if(settings.WebMIDIPortOutput!=null){
 							if(message.message[0]!=0xff && (that.settings.WebMIDIPortSysEx || (message.message[0]!=0xf0 && message.message[0]!=0xf7))){
 								try{
-									settings.WebMIDIPortOutput.send(message.message, (that.getTime(message.timing) - context.currentTime +window.performance.now()/1000 + states.startTime) * 1000);
+									settings.WebMIDIPortOutput.send(message.message,
+										(that.getTime(message.timing) - context.currentTime + window.performance.now()/1000 + states.startTime) * 1000);
 								}catch(e){
 									console.log(e, message.message);
 								}
@@ -1031,9 +1052,10 @@ var PicoAudio = (function(){
 			while(p<endPoint){
 				// DeltaTime
 				if(lastState!=null){
-					var lengthAry = variableLengthToInt(smf.subarray(p, p+4));
+					var lengthAry = variableLengthToInt(smf.subarray(p, p+5));
 					var dt = lengthAry[0];
 					time += dt;
+					if(time>100000000) time = 100000000; // 長すぎる曲は途中で打ち切る(PicotuneのCanvas生成で時間がかかるため)
 					p += lengthAry[1];
 				}
 				// WebMIDIAPI
@@ -1449,7 +1471,7 @@ var PicoAudio = (function(){
 			var i = 0;
 			var value = 0;
 			while(i<arr.length-1 && arr[i]>=0x80){
-				value = (value<<7) + (arr[i]-0x80);
+				if (i < 4) value = (value<<7) + (arr[i]-0x80);
 				i++;
 			}
 			value = (value<<7) + arr[i];
@@ -1461,11 +1483,19 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.stopAudioNode = function(tar, time, gainNode){
 		try{
-			tar.stop(time);
+			if(time > 0) {
+				tar.stop(time);
+			} else {
+				tar.stop(this.context.currentTime+0.005);
+				gainNode.gain.cancelScheduledValues(this.context.currentTime);
+				gainNode.gain.linearRampToValueAtTime(0, this.context.currentTime+0.005);
+			}
 		} catch(e) {
 			// iOS
 			gainNode.gain.cancelScheduledValues(time);
-			gainNode.gain.setValueAtTime(0, time);
+			if(time <= 0) {
+				gainNode.gain.linearRampToValueAtTime(0, this.context.currentTime+0.005);
+			}
 		}
 	};
 
