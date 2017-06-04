@@ -75,7 +75,8 @@ var PicoAudio = (function(){
 			this.convolverGainNode = this.context.createGain();
 			this.convolverGainNode.gain.value = this.settings.reverbVolume;
 			this.convolver.connect(this.convolverGainNode);
-			this.convolverGainNode.connect(this.context.destination);
+			this.convolverGainNode.connect(this.masterGainNode);
+			this.masterGainNode.connect(this.context.destination);
 		}
 		
 		if(_picoAudio && _picoAudio.chorusDelayNode){ // 使いまわし
@@ -92,7 +93,8 @@ var PicoAudio = (function(){
 			this.chorusOscillator.connect(this.chorusLfoGainNode);
 			this.chorusLfoGainNode.connect(this.chorusDelayNode.delayTime);
 			this.chorusDelayNode.connect(this.chorusGainNode);
-			this.chorusGainNode.connect(this.context.destination);
+			this.chorusGainNode.connect(this.masterGainNode);
+			this.masterGainNode.connect(this.context.destination);
 			this.chorusOscillator.start(0);
 		}
 		
@@ -660,6 +662,14 @@ var PicoAudio = (function(){
 		navigator.requestMIDIAccess({sysex: sysEx})
 			.then(midiAccessSuccess)
 			.catch(midiAccessFailure);
+		window.addEventListener('unload', function(e) {
+			for(var t=0; t<16; t++){
+				that.settings.WebMIDIPortOutput.send([0xB0+t, 120, 0]);
+				for(var i=0; i<128; i++){
+					that.settings.WebMIDIPortOutput.send([0x80+t, i, 0]);
+				}
+			}
+		});
 	};
 
 	PicoAudio.prototype.initStatus = function(isSongLooping){
