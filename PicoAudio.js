@@ -8,8 +8,8 @@ var PicoAudio = (function(){
 			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
-			hashLength: 1000,
-			hashBuffer: 1,
+			hashLength: this.isAndroid() ? 25 : 50,
+			hashBuffer: 2,
 			isWebMIDI: false,
 			WebMIDIPortOutputs: null,
 			WebMIDIPortOutput: null,
@@ -221,7 +221,7 @@ var PicoAudio = (function(){
 		}
 
 		if((oscillator.type == "sine" || oscillator.type == "triangle")
-			&& !isPizzicato && note.stop - note.start > 0.1){
+			&& !isPizzicato && note.stop - note.start > 0.01){
 			// 終わり際に少し減衰しノイズ削減
 			noiseCutGainNode.gain.setValueAtTime(1, note.stop-0.005);
 			noiseCutGainNode.gain.linearRampToValueAtTime(0, note.stop);
