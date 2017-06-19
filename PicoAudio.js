@@ -788,7 +788,7 @@ var PicoAudio = (function(){
 				reserveSongEnd = setTimeout(reserveSongEndFunc, 1);
 				that.pushFunc({
 					rootTimeout: reserveSongEnd,
-					stopFunc: function(){ clearTimeout(reserveSongEndAgain); }
+					stopFunc: function(){ clearTimeout(reserveSongEnd); }
 				});
 			}
 		};
