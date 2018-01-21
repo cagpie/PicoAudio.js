@@ -8,7 +8,7 @@ var PicoAudio = (function(){
 			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
-			hashLength: this.isAndroid() ? 25 : 50,
+			hashLength: this.isWindows() || this.isIOS ? 50 : 20,
 			hashBuffer: 2,
 			isWebMIDI: false,
 			WebMIDIPortOutputs: null,
@@ -21,7 +21,9 @@ var PicoAudio = (function(){
 			chorusVolume: 0.5,
 			isCC111: true,
 			dramMaxPlayLength: 0.5, // ドラムで一番長い音の秒数
-			loop: false
+			loop: false,
+			isSkipBeginning: false, // 冒頭の余白をスキップ
+			isSkipEnding: true // 末尾の空白をスキップ
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
@@ -67,7 +69,7 @@ var PicoAudio = (function(){
 			}
 		}
 		// リバーブ用（convolverは重いので１つだけ作成）
-		if(_picoAudio && _picoAudio.convolver){ // 使いまわし
+		if(false && _picoAudio && _picoAudio.convolver){ // 使いまわし→リバーブの音量をミュートにできないので使いまわししない
 			this.convolver = _picoAudio.convolver;
 		} else {
 			this.convolver = this.context.createConvolver();
@@ -80,7 +82,7 @@ var PicoAudio = (function(){
 			this.masterGainNode.connect(this.context.destination);
 		}
 		
-		if(_picoAudio && _picoAudio.chorusDelayNode){ // 使いまわし
+		if(false && _picoAudio && _picoAudio.chorusDelayNode){ // 使いまわし→コーラスの音量をミュートにできないので使いまわししない
 			this.chorusDelayNode = _picoAudio.chorusDelayNode;
 		} else {
 			this.chorusDelayNode = this.context.createDelay();
@@ -174,7 +176,7 @@ var PicoAudio = (function(){
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+0.2);
-				that.stopAudioNode(oscillator, note.start+0.5, gainNode);
+				that.stopAudioNode(oscillator, note.start+0.2, gainNode);
 				break;
 			}
 			// ピアノ程度に伸ばす系
@@ -420,7 +422,7 @@ var PicoAudio = (function(){
 		var stop = this.getTime(option.stop) + songStartTime;
 		var pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
 		var channel = nonChannel ? 0 : (option.channel || 0);
-		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] || 1)) * settings.generateVolume;
+		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] != null ? this.channels[channel][2] : 1)) * settings.generateVolume;
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
@@ -772,9 +774,17 @@ var PicoAudio = (function(){
 				states.webMIDIWaitState = null;
 			}
 		}
+		var currentTime = this.context.currentTime;
 		states.isPlaying = true;
-		states.startTime = !states.startTime && !states.stopTime ? this.context.currentTime : (states.startTime + this.context.currentTime - states.stopTime);
+		states.startTime = !states.startTime && !states.stopTime ? currentTime : (states.startTime + currentTime - states.stopTime);
 		states.stopFuncs = [];
+		// 冒頭の余白をスキップ
+		if (this.isSkipBeginning) {
+			var firstNoteOnTime = this.getTime(this.firstNoteOnTiming);
+			if (-states.startTime + currentTime < firstNoteOnTime) {
+				this.setStartTime(firstNoteOnTime + states.startTime - currentTime);
+			}
+		}
 		// 曲終了コールバックを予約
 		var reserveSongEnd;
 		var reserveSongEndFunc = function(){
@@ -983,9 +993,19 @@ var PicoAudio = (function(){
 		this.settings.chorusVolume = volume;
 	};
 
+	PicoAudio.prototype.isWindows = function(){
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("windows") != -1;
+	};
+
 	PicoAudio.prototype.isAndroid = function(){
 		var u = navigator.userAgent.toLowerCase();
 		return u.indexOf("android") != -1 && u.indexOf("windows") == -1;
+	};
+
+	PicoAudio.prototype.isIOS = function(){
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("iphone") != -1 || u.indexOf("ipad") != -1 || u.indexOf("ipod") != -1;
 	};
 
 	PicoAudio.prototype.getTime = function(timing){
@@ -1169,7 +1189,7 @@ var PicoAudio = (function(){
 									case 0x20:
 										break;
 									case 0x2F:
-										time += /*header.resolution*/ - dt;
+										time += (this.isSkipEnding ? 0 : header.resolution) - dt;
 										break;
 									// Tempo
 									case 0x51:
