@@ -8,14 +8,14 @@ var PicoAudio = (function(){
 			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
-			hashLength: this.isWindows() || this.isIOS ? 50 : 20,
+			hashLength: this.isWindows() || this.isMacintosh() || this.isIOS() ? 50 : 20,
 			hashBuffer: 2,
 			isWebMIDI: false,
 			WebMIDIPortOutputs: null,
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
-			WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない？)
-			isReverb: !this.isAndroid(), // Android以外はリバーブON
+			WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない)
+			isReverb: this.isWindows() || this.isMacintosh() || this.isIOS(), // Windows, Mac, iOSはリバーブON
 			reverbVolume: 1.5,
 			isChorus: true,
 			chorusVolume: 0.5,
@@ -108,10 +108,13 @@ var PicoAudio = (function(){
 		var nonStop = false;
 		if(option.channel){
 			switch(this.channels[option.channel][1]/10 || option.instrument){
+				// ピッチカート系減衰は後でstopさせる
 				case 0.2:
 				case 12: case 13: case 45: case 55:
+				// 再生しない系は後でstopさせる
+				case 119:
 					nonStop = true;
-					break; // ピッチカート系減衰は後でstopさせる
+					break;
 			}
 		}
 		var note = this.createBaseNote(option, true, false, nonStop);
@@ -168,7 +171,7 @@ var PicoAudio = (function(){
 		}
 		// 音色別の減衰　書き方ミスったなあ
 		switch(this.channels[note.channel][1]/10 || option.instrument){
-			// 
+			// ピッチカート系減衰
 			case 0.2:
 			case 12: case 13: case 45: case 55:
 			{
@@ -427,6 +430,7 @@ var PicoAudio = (function(){
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var gainNode = context.createGain();
+		var isGainValueZero = true;
 		var noiseCutGainNode = context.createGain();
 		var that = this;
 		
@@ -445,7 +449,6 @@ var PicoAudio = (function(){
 			panNode.pan.value = panValue;
 		}
 		
-		gainNode.gain.value = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
 		if(channel!=9){
 			oscillator.type = option.type || "sine";
 			oscillator.detune.value = 0;
@@ -460,13 +463,20 @@ var PicoAudio = (function(){
 			oscillator.loop = true;
 			oscillator.buffer = this.whitenoise
 		}
+		
+		var gainValue = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+		gainNode.gain.value = gainValue;
 		if(isExpression){
 			option.expression ? option.expression.forEach(function(p){
+				var v = velocity * (p.value / 127);
+				if(v > 0) isGainValueZero = false;
 				gainNode.gain.setValueAtTime(
-					velocity * (p.value / 127),
+					v,
 					that.getTime(p.timing) + songStartTime
 				);
 			}) : false;
+		} else {
+			if(gainValue > 0) isGainValueZero = false;
 		}
 		if(context.createStereoPanner || context.createPanner){
 			var firstPan = true;
@@ -609,8 +619,12 @@ var PicoAudio = (function(){
 		}
 		
 		oscillator.start(start);
-		if(channel!=9 && !nonChannel && !nonStop){
-			this.stopAudioNode(oscillator, stop, gainNode);
+		if(isGainValueZero){ // 音量が常に0なら音を即停止
+			this.stopAudioNode(oscillator, start, gainNode);
+		} else {
+			if(channel!=9 && !nonChannel && !nonStop){
+				this.stopAudioNode(oscillator, stop, gainNode);
+			}
 		}
 		
 		return {
@@ -622,7 +636,8 @@ var PicoAudio = (function(){
 			oscillator: oscillator,
 			panNode: panNode,
 			gainNode: gainNode,
-			noiseCutGainNode: noiseCutGainNode
+			noiseCutGainNode: noiseCutGainNode,
+			isGainValueZero: isGainValueZero
 		};
 	};
 
@@ -996,6 +1011,11 @@ var PicoAudio = (function(){
 	PicoAudio.prototype.isWindows = function(){
 		var u = navigator.userAgent.toLowerCase();
 		return u.indexOf("windows") != -1;
+	};
+
+	PicoAudio.prototype.isMacintosh = function(){
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("macintosh") != -1;
 	};
 
 	PicoAudio.prototype.isAndroid = function(){
