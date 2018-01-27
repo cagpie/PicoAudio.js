@@ -108,13 +108,17 @@ var PicoAudio = (function(){
 		var nonStop = false;
 		if(option.channel){
 			switch(this.channels[option.channel][1]/10 || option.instrument){
+				// ピッチカート系減衰は後でstopさせる
 				case 0.2:
 				case 12: case 13: case 45: case 55:
+				// 再生しない系は後でstopさせる
+				case 119:
 					nonStop = true;
-					break; // ピッチカート系減衰は後でstopさせる
+					break;
 			}
 		}
 		var note = this.createBaseNote(option, true, false, nonStop);
+		if(note.isGainValueZero) return function(){};
 
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
@@ -237,6 +241,8 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.createPercussionNote = function(option){
 		var note = this.createBaseNote(option, false);
+		if(note.isGainValueZero) return function(){};
+
 		var source = note.oscillator;
 		var gainNode = note.gainNode;
 		var panNode = note.panNode;
@@ -421,18 +427,39 @@ var PicoAudio = (function(){
 		var settings = this.settings;
 		var context = this.context;
 		var songStartTime = this.states.startTime;
+		var that = this;
+		var channel = nonChannel ? 0 : (option.channel || 0);
+		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] != null ? this.channels[channel][2] : 1)) * settings.generateVolume;
+		var gainNode = context.createGain();
+		var isGainValueZero = true;
+
+		var gainValue = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+		gainNode.gain.value = gainValue;
+		if(isExpression){
+			option.expression ? option.expression.forEach(function(p){
+				var v = velocity * (p.value / 127);
+				if(v > 0) isGainValueZero = false;
+				gainNode.gain.setValueAtTime(
+					v,
+					that.getTime(p.timing) + songStartTime
+				);
+			}) : false;
+		} else {
+			if(gainValue > 0) isGainValueZero = false;
+		}
+
+		if(isGainValueZero){ // 音量が常に0なら音を鳴らさない
+			return {isGainValueZero: isGainValueZero};
+		}
+
 		var start = this.getTime(option.start) + songStartTime;
 		var stop = this.getTime(option.stop) + songStartTime;
 		var pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
-		var channel = nonChannel ? 0 : (option.channel || 0);
-		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] != null ? this.channels[channel][2] : 1)) * settings.generateVolume;
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
-		var gainNode = context.createGain();
 		var noiseCutGainNode = context.createGain();
-		var that = this;
-		
+
 		if(!context.createStereoPanner && context.createPanner) {
 			// iOS, Old Browser
 			var panValue = option.pan && option.pan[0].value != 64 ? (option.pan[0].value / 127) * 2 - 1 : 0;
@@ -447,8 +474,7 @@ var PicoAudio = (function(){
 			if(panValue > 1.0) panValue = 1.0;
 			panNode.pan.value = panValue;
 		}
-		
-		gainNode.gain.value = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+
 		if(channel!=9){
 			oscillator.type = option.type || "sine";
 			oscillator.detune.value = 0;
@@ -463,14 +489,7 @@ var PicoAudio = (function(){
 			oscillator.loop = true;
 			oscillator.buffer = this.whitenoise
 		}
-		if(isExpression){
-			option.expression ? option.expression.forEach(function(p){
-				gainNode.gain.setValueAtTime(
-					velocity * (p.value / 127),
-					that.getTime(p.timing) + songStartTime
-				);
-			}) : false;
-		}
+
 		if(context.createStereoPanner || context.createPanner){
 			var firstPan = true;
 			if(context.createStereoPanner) {
@@ -625,7 +644,8 @@ var PicoAudio = (function(){
 			oscillator: oscillator,
 			panNode: panNode,
 			gainNode: gainNode,
-			noiseCutGainNode: noiseCutGainNode
+			noiseCutGainNode: noiseCutGainNode,
+			isGainValueZero: isGainValueZero
 		};
 	};
 
