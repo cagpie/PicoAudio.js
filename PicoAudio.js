@@ -8,7 +8,7 @@ var PicoAudio = (function(){
 			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
-			hashLength: this.isAndroid() ? 25 : 50,
+			hashLength: this.isAndroid() ? 20 : 30,
 			hashBuffer: 2,
 			isWebMIDI: false,
 			WebMIDIPortOutputs: null,
@@ -21,7 +21,9 @@ var PicoAudio = (function(){
 			chorusVolume: 0.5,
 			isCC111: true,
 			dramMaxPlayLength: 0.5, // ドラムで一番長い音の秒数
-			loop: false
+			loop: false,
+			isSkipBeginning: false, // 冒頭の余白をスキップ
+			isSkipEnding: true // 末尾の空白をスキップ
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
@@ -67,7 +69,7 @@ var PicoAudio = (function(){
 			}
 		}
 		// リバーブ用（convolverは重いので１つだけ作成）
-		if(_picoAudio && _picoAudio.convolver){ // 使いまわし
+		if(false && _picoAudio && _picoAudio.convolver){ // 使いまわし→リバーブの音量をミュートにできないので使いまわししない
 			this.convolver = _picoAudio.convolver;
 		} else {
 			this.convolver = this.context.createConvolver();
@@ -79,8 +81,8 @@ var PicoAudio = (function(){
 			this.convolverGainNode.connect(this.masterGainNode);
 			this.masterGainNode.connect(this.context.destination);
 		}
-		
-		if(_picoAudio && _picoAudio.chorusDelayNode){ // 使いまわし
+
+		if(false && _picoAudio && _picoAudio.chorusDelayNode){ // 使いまわし→コーラスの音量をミュートにできないので使いまわししない
 			this.chorusDelayNode = _picoAudio.chorusDelayNode;
 		} else {
 			this.chorusDelayNode = this.context.createDelay();
@@ -98,7 +100,7 @@ var PicoAudio = (function(){
 			this.masterGainNode.connect(this.context.destination);
 			this.chorusOscillator.start(0);
 		}
-		
+
 		this.onSongEndListener = null;
 	}
 
@@ -113,12 +115,14 @@ var PicoAudio = (function(){
 			}
 		}
 		var note = this.createBaseNote(option, true, false, nonStop);
+
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
 		var panNode = note.panNode;
 		var noiseCutGainNode = note.noiseCutGainNode;
 		var isPizzicato = false;
 		var that = this;
+
 		// 音色別の音色振り分け 書き方(ry
 		switch(this.channels[note.channel][0]/10 || option.instrument){
 			// Sine
@@ -166,7 +170,7 @@ var PicoAudio = (function(){
 		}
 		// 音色別の減衰　書き方ミスったなあ
 		switch(this.channels[note.channel][1]/10 || option.instrument){
-			// 
+			// ピッチカート系減衰
 			case 0.2:
 			case 12: case 13: case 45: case 55:
 			{
@@ -174,7 +178,7 @@ var PicoAudio = (function(){
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+0.2);
-				that.stopAudioNode(oscillator, note.start+0.5, gainNode);
+				that.stopAudioNode(oscillator, note.start+0.2, gainNode);
 				break;
 			}
 			// ピアノ程度に伸ばす系
@@ -244,6 +248,7 @@ var PicoAudio = (function(){
 		var gainNode2 = note2.gainNode;
 		var panNode2 = note2.panNode;
 		var that = this;
+
 		switch(option.pitch){
 			// Bass drum
 			case 35:
@@ -420,7 +425,7 @@ var PicoAudio = (function(){
 		var stop = this.getTime(option.stop) + songStartTime;
 		var pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
 		var channel = nonChannel ? 0 : (option.channel || 0);
-		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] || 1)) * settings.generateVolume;
+		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] != null ? this.channels[channel][2] : 1)) * settings.generateVolume;
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
 		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
@@ -530,7 +535,7 @@ var PicoAudio = (function(){
 		gainNode.connect(noiseCutGainNode);
 		noiseCutGainNode.connect(this.masterGainNode);
 		this.masterGainNode.connect(context.destination);
-		
+
 		if(channel!=9 && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
 			var modulationOscillator = context.createOscillator();
 			var modulationGainNode = context.createGain();
@@ -554,7 +559,7 @@ var PicoAudio = (function(){
 			modulationOscillator.connect(modulationGainNode);
 			modulationGainNode.connect(oscillator.frequency);
 		}
-		
+
 		if(this.settings.isReverb && option.reverb && (option.reverb.length >= 2 || option.reverb[0].value > 0)){
 			var convolver = this.convolver;
 			var convolverGainNode = context.createGain();
@@ -577,7 +582,7 @@ var PicoAudio = (function(){
 			gainNode.connect(convolverGainNode);
 			convolverGainNode.connect(convolver);
 		}
-		
+
 		if(this.settings.isChorus && option.chorus && (option.chorus.length >= 2 || option.chorus[0].value > 0)){
 			var chorusDelayNode = this.chorusDelayNode;
 			var chorusGainNode = context.createGain();
@@ -600,17 +605,17 @@ var PicoAudio = (function(){
 			gainNode.connect(chorusGainNode);
 			chorusGainNode.connect(chorusDelayNode);
 		}
-		
+
 		if(modulationOscillator){
 			modulationOscillator.start(start);
 			this.stopAudioNode(modulationOscillator, stop, modulationGainNode);
 		}
-		
+
 		oscillator.start(start);
 		if(channel!=9 && !nonChannel && !nonStop){
 			this.stopAudioNode(oscillator, stop, gainNode);
 		}
-		
+
 		return {
 			start: start,
 			stop: stop,
@@ -772,9 +777,17 @@ var PicoAudio = (function(){
 				states.webMIDIWaitState = null;
 			}
 		}
+		var currentTime = this.context.currentTime;
 		states.isPlaying = true;
-		states.startTime = !states.startTime && !states.stopTime ? this.context.currentTime : (states.startTime + this.context.currentTime - states.stopTime);
+		states.startTime = !states.startTime && !states.stopTime ? currentTime : (states.startTime + currentTime - states.stopTime);
 		states.stopFuncs = [];
+		// 冒頭の余白をスキップ
+		if (this.isSkipBeginning) {
+			var firstNoteOnTime = this.getTime(this.firstNoteOnTiming);
+			if (-states.startTime + currentTime < firstNoteOnTime) {
+				this.setStartTime(firstNoteOnTime + states.startTime - currentTime);
+			}
+		}
 		// 曲終了コールバックを予約
 		var reserveSongEnd;
 		var reserveSongEndFunc = function(){
@@ -801,7 +814,7 @@ var PicoAudio = (function(){
 		});
 		(function playHash(idx){
 			states.playIndex = idx;
-			if(hashedDataList && hashedDataList[idx]){		
+			if(hashedDataList && hashedDataList[idx]){
 				hashedDataList[idx].forEach(function(note){
 					if(!settings.isWebMIDI) {
 						that.pushFunc({
@@ -828,7 +841,7 @@ var PicoAudio = (function(){
 					});
 				});
 			}
-			if(settings.isWebMIDI && that.hashedMessageList && that.hashedMessageList[idx]){	
+			if(settings.isWebMIDI && that.hashedMessageList && that.hashedMessageList[idx]){
 				that.hashedMessageList[idx].forEach(function(message){
 					if(settings.WebMIDIPortOutput!=null){
 						if(message.message[0]!=0xff && (that.settings.WebMIDIPortSysEx || (message.message[0]!=0xf0 && message.message[0]!=0xf7))){
@@ -1118,7 +1131,7 @@ var PicoAudio = (function(){
 							case 0xF7:
 								// SysEx Events
 								var lengthAry = variableLengthToInt(smf.subarray(p+1, p+1+4));
-								
+
 								// Master Volume
 								if(lengthAry[0]>=7 && smf[p+2]==0x7f && smf[p+3]==0x7f && smf[p+4]==0x04 && smf[p+5]==0x01){
 									// 全チャンネルにMasterVolumeメッセージを挿入する
@@ -1135,7 +1148,7 @@ var PicoAudio = (function(){
 										channelMessages.splice(mesIdx, 0, mesObj);
 									}
 								}
-								
+
 								p+=1+lengthAry[1]+lengthAry[0];
 								break;
 							case 0xF1:
@@ -1169,7 +1182,7 @@ var PicoAudio = (function(){
 									case 0x20:
 										break;
 									case 0x2F:
-										time += /*header.resolution*/ - dt;
+										time += (this.isSkipEnding ? 0 : header.resolution) - dt;
 										break;
 									// Tempo
 									case 0x51:
@@ -1233,7 +1246,7 @@ var PicoAudio = (function(){
 			if(songLength<time) songLength = time;
 		}
 		tempoTrack.push({ timing:songLength, value:120 });
-		
+
 		// Midi Events (0x8n - 0xEn) parse
 		for(var ch=0; ch<channels.length; ch++){
 			var channel = channels[ch];
@@ -1461,7 +1474,7 @@ var PicoAudio = (function(){
 			}
 			delete channel.messages;
 		}
-		
+
 		data.header = header;
 		data.tempoTrack = tempoTrack;
 		data.beatTrack = beatTrack;
@@ -1471,7 +1484,7 @@ var PicoAudio = (function(){
 		data.firstNoteOnTiming = firstNoteOnTiming;
 		data.lastNoteOffTiming = lastNoteOffTiming;
 		if(this.settings.isWebMIDI) data.messages = messages;
-		
+
 		function getInt(arr){
 			var value = 0;
 			for (var  i=0;i<arr.length;i++){
