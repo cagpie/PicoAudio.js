@@ -1202,7 +1202,7 @@ var PicoAudio = (function(){
 									case 0x20:
 										break;
 									case 0x2F:
-										time += (this.isSkipEnding ? 0 : header.resolution) - dt;
+										time += (this.settings.isSkipEnding ? 0 : header.resolution) - dt;
 										break;
 									// Tempo
 									case 0x51:
