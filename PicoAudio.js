@@ -487,7 +487,7 @@ var PicoAudio = (function(){
 			}) : false;
 		} else {
 			oscillator.loop = true;
-			oscillator.buffer = this.whitenoise
+			oscillator.buffer = this.whitenoise;
 		}
 
 		if(context.createStereoPanner || context.createPanner){
@@ -802,7 +802,7 @@ var PicoAudio = (function(){
 		states.startTime = !states.startTime && !states.stopTime ? currentTime : (states.startTime + currentTime - states.stopTime);
 		states.stopFuncs = [];
 		// 冒頭の余白をスキップ
-		if (this.isSkipBeginning) {
+		if (this.settings.isSkipBeginning) {
 			var firstNoteOnTime = this.getTime(this.firstNoteOnTiming);
 			if (-states.startTime + currentTime < firstNoteOnTime) {
 				this.setStartTime(firstNoteOnTime + states.startTime - currentTime);
