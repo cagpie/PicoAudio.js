@@ -1,7 +1,5 @@
 var PicoAudio = (function(){
 	function PicoAudio(_audioContext, _picoAudio){
-		var AudioContext = window.AudioContext || window.webkitAudioContext;
-		this.context = _audioContext ? _audioContext : new AudioContext();
 		this.settings = {
 			masterVolume: 1,
 			generateVolume: 0.15,
@@ -32,8 +30,19 @@ var PicoAudio = (function(){
 		this.channels = [];
 		this.tempoTrack = [{ timing:0, value:120 },{ timing:0, value:120 }];
 		this.cc111Time = -1;
+		this.onSongEndListener = null;
+
 		for(var i=0; i<17; i++)
 			this.channels.push([0,0,1]);
+		// AudioContextがある場合はそのまま初期化、なければAudioContextを用いる初期化をinit()で
+		if(_audioContext){
+			this.init(_audioContext, _picoAudio);
+		}
+	}
+
+	PicoAudio.prototype.init = function(_audioContext, _picoAudio){
+		var AudioContext = window.AudioContext || window.webkitAudioContext;
+		this.context = _audioContext ? _audioContext : new AudioContext();
 		if(_picoAudio && _picoAudio.whitenoise){ // 使いまわし
 			this.whitenoise = _picoAudio.whitenoise;
 		} else {
@@ -100,8 +109,6 @@ var PicoAudio = (function(){
 			this.masterGainNode.connect(this.context.destination);
 			this.chorusOscillator.start(0);
 		}
-
-		this.onSongEndListener = null;
 	}
 
 	PicoAudio.prototype.createNote = function(option){
@@ -487,7 +494,7 @@ var PicoAudio = (function(){
 			}) : false;
 		} else {
 			oscillator.loop = true;
-			oscillator.buffer = this.whitenoise;
+			oscillator.buffer = this.whitenoise
 		}
 
 		if(context.createStereoPanner || context.createPanner){
@@ -802,7 +809,7 @@ var PicoAudio = (function(){
 		states.startTime = !states.startTime && !states.stopTime ? currentTime : (states.startTime + currentTime - states.stopTime);
 		states.stopFuncs = [];
 		// 冒頭の余白をスキップ
-		if (this.settings.isSkipBeginning) {
+		if (this.isSkipBeginning) {
 			var firstNoteOnTime = this.getTime(this.firstNoteOnTiming);
 			if (-states.startTime + currentTime < firstNoteOnTime) {
 				this.setStartTime(firstNoteOnTime + states.startTime - currentTime);
