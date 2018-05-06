@@ -90,8 +90,8 @@ var PicoAudio = (function(){
 			this.chorusOscillator = this.context.createOscillator();
 			this.chorusLfoGainNode = this.context.createGain();
 			this.chorusDelayNode.delayTime.value = 0.025;
-			this.chorusLfoGainNode.gain.value = 0.010; 
-			this.chorusOscillator.frequency.value = 0.05; 
+			this.chorusLfoGainNode.gain.value = 0.010;
+			this.chorusOscillator.frequency.value = 0.05;
 			this.chorusGainNode.gain.value = this.settings.chorusVolume;
 			this.chorusOscillator.connect(this.chorusLfoGainNode);
 			this.chorusLfoGainNode.connect(this.chorusDelayNode.delayTime);
@@ -456,7 +456,7 @@ var PicoAudio = (function(){
 		var stop = this.getTime(option.stop) + songStartTime;
 		var pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
-		var panNode = context.createStereoPanner ? context.createStereoPanner() : 
+		var panNode = context.createStereoPanner ? context.createStereoPanner() :
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var noiseCutGainNode = context.createGain();
 
@@ -487,7 +487,7 @@ var PicoAudio = (function(){
 			}) : false;
 		} else {
 			oscillator.loop = true;
-			oscillator.buffer = this.whitenoise
+			oscillator.buffer = this.whitenoise;
 		}
 
 		if(context.createStereoPanner || context.createPanner){
@@ -726,7 +726,7 @@ var PicoAudio = (function(){
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 101, 0]);
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 6, 2]); //pitchbend
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 100, 1]);
-					this.settings.WebMIDIPortOutput.send([0xB0+t, 96, 0]); 
+					this.settings.WebMIDIPortOutput.send([0xB0+t, 96, 0]);
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 97, 64]);　//tuning?
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 7, 100]); // volume
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 10, 64]); // pan
@@ -802,7 +802,7 @@ var PicoAudio = (function(){
 		states.startTime = !states.startTime && !states.stopTime ? currentTime : (states.startTime + currentTime - states.stopTime);
 		states.stopFuncs = [];
 		// 冒頭の余白をスキップ
-		if (this.isSkipBeginning) {
+		if (this.settings.isSkipBeginning) {
 			var firstNoteOnTime = this.getTime(this.firstNoteOnTiming);
 			if (-states.startTime + currentTime < firstNoteOnTime) {
 				this.setStartTime(firstNoteOnTime + states.startTime - currentTime);
@@ -897,7 +897,7 @@ var PicoAudio = (function(){
 	PicoAudio.prototype.setData = function(data){
 		if(this.states.isPlaying) this.stop();
 		this.settings.resolution = data.header.resolution;
-		this.settings.tempo = data.tempo || 120; 
+		this.settings.tempo = data.tempo || 120;
 		this.tempoTrack = data.tempoTrack;
 		this.cc111Time = data.cc111Time;
 		this.firstNoteOnTiming = data.firstNoteOnTiming;
@@ -1101,7 +1101,6 @@ var PicoAudio = (function(){
 					var lengthAry = variableLengthToInt(smf.subarray(p, p+5));
 					var dt = lengthAry[0];
 					time += dt;
-					if(time>100000000) time = 100000000; // 長すぎる曲は途中で打ち切る(PicotuneのCanvas生成で時間がかかるため)
 					p += lengthAry[1];
 				}
 				// WebMIDIAPI
@@ -1263,9 +1262,8 @@ var PicoAudio = (function(){
 					}
 				}
 			}
-			if(songLength<time) songLength = time;
+			if(!this.settings.isSkipEnding && songLength<time) songLength = time;
 		}
-		tempoTrack.push({ timing:songLength, value:120 });
 
 		// Midi Events (0x8n - 0xEn) parse
 		for(var ch=0; ch<channels.length; ch++){
@@ -1494,6 +1492,8 @@ var PicoAudio = (function(){
 			}
 			delete channel.messages;
 		}
+		if(this.settings.isSkipEnding) songLength = lastNoteOffTiming;
+		tempoTrack.push({ timing:songLength, value:120 });
 
 		data.header = header;
 		data.tempoTrack = tempoTrack;
