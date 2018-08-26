@@ -77,38 +77,31 @@ var PicoAudio = (function(){
 				}
 			}
 		}
-		// リバーブ用（convolverは重いので１つだけ作成）
-		if(false && _picoAudio && _picoAudio.convolver){ // 使いまわし→リバーブの音量をミュートにできないので使いまわししない
-			this.convolver = _picoAudio.convolver;
-		} else {
-			this.convolver = this.context.createConvolver();
-			this.convolver.buffer = this.impulseResponse;
-			this.convolver.normalize = false;
-			this.convolverGainNode = this.context.createGain();
-			this.convolverGainNode.gain.value = this.settings.reverbVolume;
-			this.convolver.connect(this.convolverGainNode);
-			this.convolverGainNode.connect(this.masterGainNode);
-			this.masterGainNode.connect(this.context.destination);
-		}
+		// リバーブ用
+		this.convolver = this.context.createConvolver();
+		this.convolver.buffer = this.impulseResponse;
+		this.convolver.normalize = false;
+		this.convolverGainNode = this.context.createGain();
+		this.convolverGainNode.gain.value = this.settings.reverbVolume;
+		this.convolver.connect(this.convolverGainNode);
+		this.convolverGainNode.connect(this.masterGainNode);
+		this.masterGainNode.connect(this.context.destination);
 
-		if(false && _picoAudio && _picoAudio.chorusDelayNode){ // 使いまわし→コーラスの音量をミュートにできないので使いまわししない
-			this.chorusDelayNode = _picoAudio.chorusDelayNode;
-		} else {
-			this.chorusDelayNode = this.context.createDelay();
-			this.chorusGainNode = this.context.createGain();
-			this.chorusOscillator = this.context.createOscillator();
-			this.chorusLfoGainNode = this.context.createGain();
-			this.chorusDelayNode.delayTime.value = 0.025;
-			this.chorusLfoGainNode.gain.value = 0.010;
-			this.chorusOscillator.frequency.value = 0.05;
-			this.chorusGainNode.gain.value = this.settings.chorusVolume;
-			this.chorusOscillator.connect(this.chorusLfoGainNode);
-			this.chorusLfoGainNode.connect(this.chorusDelayNode.delayTime);
-			this.chorusDelayNode.connect(this.chorusGainNode);
-			this.chorusGainNode.connect(this.masterGainNode);
-			this.masterGainNode.connect(this.context.destination);
-			this.chorusOscillator.start(0);
-		}
+		// コーラス用
+		this.chorusDelayNode = this.context.createDelay();
+		this.chorusGainNode = this.context.createGain();
+		this.chorusOscillator = this.context.createOscillator();
+		this.chorusLfoGainNode = this.context.createGain();
+		this.chorusDelayNode.delayTime.value = 0.025;
+		this.chorusLfoGainNode.gain.value = 0.010;
+		this.chorusOscillator.frequency.value = 0.05;
+		this.chorusGainNode.gain.value = this.settings.chorusVolume;
+		this.chorusOscillator.connect(this.chorusLfoGainNode);
+		this.chorusLfoGainNode.connect(this.chorusDelayNode.delayTime);
+		this.chorusDelayNode.connect(this.chorusGainNode);
+		this.chorusGainNode.connect(this.masterGainNode);
+		this.masterGainNode.connect(this.context.destination);
+		this.chorusOscillator.start(0);
 	}
 
 	PicoAudio.prototype.createNote = function(option){
@@ -494,7 +487,7 @@ var PicoAudio = (function(){
 			}) : false;
 		} else {
 			oscillator.loop = true;
-			oscillator.buffer = this.whitenoise
+			oscillator.buffer = this.whitenoise;
 		}
 
 		if(context.createStereoPanner || context.createPanner){
@@ -809,7 +802,7 @@ var PicoAudio = (function(){
 		states.startTime = !states.startTime && !states.stopTime ? currentTime : (states.startTime + currentTime - states.stopTime);
 		states.stopFuncs = [];
 		// 冒頭の余白をスキップ
-		if (this.isSkipBeginning) {
+		if (this.settings.isSkipBeginning) {
 			var firstNoteOnTime = this.getTime(this.firstNoteOnTiming);
 			if (-states.startTime + currentTime < firstNoteOnTime) {
 				this.setStartTime(firstNoteOnTime + states.startTime - currentTime);
