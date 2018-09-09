@@ -22,7 +22,8 @@ var PicoAudio = (function(){
 			dramMaxPlayLength: 0.5, // ドラムで一番長い音の秒数
 			loop: false,
 			isSkipBeginning: false, // 冒頭の余白をスキップ
-			isSkipEnding: true // 末尾の空白をスキップ
+			isSkipEnding: true, // 末尾の空白をスキップ
+			holdOnValue: 64
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
@@ -1296,6 +1297,7 @@ var PicoAudio = (function(){
 			var expression = 127;
 			var velocity = 100;
 			var modulation = 0;
+			var hold = 0;
 			var reverb = 10;
 			var chorus = 0;
 			var nrpnLsb = 127;
@@ -1314,18 +1316,25 @@ var PicoAudio = (function(){
 				switch(Math.floor(mes[0]/0x10)){
 					// Note OFF - 8[ch], Pitch, Velocity
 					case 0x8:
-						var i=0;
-						nowNoteOnIdxAry.some(function(idx){
+						nowNoteOnIdxAry.some(function(idx,i){
 							var note = channel.notes[idx];
 							if(note.pitch==mes[1] && note.stop==null){
-								note.stop = time;
-								nowNoteOnIdxAry.splice(i, 1);
+								if(hold>=that.settings.holdOnValue){
+									if (note.holdBeforeStop==null){
+										note.holdBeforeStop = [{
+											timing: time,
+											value: hold
+										}];
+									}
+								} else {
+									note.stop = time;
+									nowNoteOnIdxAry.splice(i, 1);
+								}
 								if(time > lastNoteOffTiming){
 									lastNoteOffTiming = time;
 								}
 								return true;
 							}
-							i++;
 						});
 						break;
 					// Note ON - 9[ch], Pitch, Velocity
@@ -1340,29 +1349,48 @@ var PicoAudio = (function(){
 								expression: [{timing:time,value:expression*(masterVolume/127)}],
 								velocity: (mes[2]/127)*(velocity/127),
 								modulation: [{timing:time,value:modulation}],
+								holdBeforeStop: null,
 								reverb: [{timing:time,value:reverb}],
 								chorus: [{timing:time,value:chorus}],
 								instrument: instrument,
 								channel: ch
 							};
+							// If this note is NoteOn, change to NoteOFF.
+							nowNoteOnIdxAry.some(function(idx,i){
+								var note = channel.notes[idx];
+								if(note.pitch == mes[1] && note.stop==null){
+									note.stop = time;
+									nowNoteOnIdxAry.splice(i, 1);
+								}
+							});
 							nowNoteOnIdxAry.push(channel.notes.length);
 							channel.notes.push(note);
 							if(time < firstNoteOnTiming){
 								firstNoteOnTiming = time;
 							}
+							if(time > lastNoteOffTiming){
+								lastNoteOffTiming = time;
+							}
 						} else {
-							var i=0;
-							nowNoteOnIdxAry.some(function(idx){
+							nowNoteOnIdxAry.some(function(idx,i){
 								var note = channel.notes[idx];
 								if(note.pitch==mes[1] && note.stop==null){
-									note.stop = time;
-									nowNoteOnIdxAry.splice(i, 1);
+									if(hold>=that.settings.holdOnValue){
+										if (note.holdBeforeStop==null){
+											note.holdBeforeStop = [{
+												timing: time,
+												value: hold
+											}];
+										}
+									} else {
+										note.stop = time;
+										nowNoteOnIdxAry.splice(i, 1);
+									}
 									if(time > lastNoteOffTiming){
 										lastNoteOffTiming = time;
 									}
 									return true;
 								}
-								i++;
 							});
 						}
 						break;
@@ -1425,6 +1453,20 @@ var PicoAudio = (function(){
 										value: expression*(masterVolume/127)
 									});
 								});
+								break;
+							case 64:
+								//Hold1
+								hold = mes[2];
+								for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
+									var idx = nowNoteOnIdxAry[i];
+									var note = channel.notes[idx];
+									if(hold<this.settings.holdOnValue){
+										if(note.stop==null && note.holdBeforeStop!=null){
+											note.stop = time;
+											nowNoteOnIdxAry.splice(i, 1);
+										}
+									}
+								}
 								break;
 							case 91:
 								reverb = mes[2];
@@ -1510,12 +1552,37 @@ var PicoAudio = (function(){
 				}
 				p++;
 			}
+			channel.nowNoteOnIdxAry = nowNoteOnIdxAry;
 			if (!this.debug) {
 				delete channel.messages;
 			}
 		}
 		if(this.settings.isSkipEnding) songLength = lastNoteOffTiming;
 		tempoTrack.push({ timing:songLength, value:120 });
+
+		// hold note off
+		for(var ch=0; ch<channels.length; ch++){
+			var channel = channels[ch];
+			var nowNoteOnIdxAry = channels[ch].nowNoteOnIdxAry;
+			for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
+				var note = channel.notes[nowNoteOnIdxAry[i]];
+				if(note.stop==null){
+					note.stop = lastNoteOffTiming;
+					// If (note.cc[x].timing > lastNoteOffTiming), delete note.cc[x]
+					var arr = ["pitchBend", "pan", "expression", "modulation", "reverb", "chorus"];
+					arr.forEach(function(name){
+						for(var i2=note[name].length-1; i2>=1; i2--){
+							var obj = note[name][i2];
+							if(obj.timing>lastNoteOffTiming){
+								note[name].splice(i2, 1);
+							}
+						}
+					});
+					nowNoteOnIdxAry.splice(i, 1);
+				}
+			}
+			delete channel.nowNoteOnIdxAry;
+		}
 
 		data.header = header;
 		data.tempoTrack = tempoTrack;
