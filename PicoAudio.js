@@ -1,5 +1,6 @@
 var PicoAudio = (function(){
 	function PicoAudio(_audioContext, _picoAudio){
+		this.debug = true;
 		this.settings = {
 			masterVolume: 1,
 			generateVolume: 0.15,
@@ -895,6 +896,9 @@ var PicoAudio = (function(){
 	};
 
 	PicoAudio.prototype.setData = function(data){
+		if (this.debug) {
+			var syoriTimeS = Date.now();
+		}
 		if(this.states.isPlaying) this.stop();
 		this.settings.resolution = data.header.resolution;
 		this.settings.tempo = data.tempo || 120;
@@ -925,6 +929,10 @@ var PicoAudio = (function(){
 		}
 		this.hashedDataList = hashedDataList;
 		this.initStatus();
+		if (this.debug) {
+			var syoriTimeE = Date.now();
+			console.log("setData time", syoriTimeE - syoriTimeS)
+		}
 		return this;
 	};
 
@@ -1055,7 +1063,13 @@ var PicoAudio = (function(){
 		return currentTiming;
 	};
 
-	PicoAudio.prototype.parseSMF = function(smf){
+	PicoAudio.prototype.parseSMF = function(_smf){
+		if (this.debug) {
+			console.log(_smf);
+			var syoriTimeS = Date.now();
+		}
+		var that = this;
+		var smf = new Uint8Array(_smf); // smf配列はデータ上書きするので_smfをディープコピーする
 		if(smf[0] != 77 || smf[1] != 84 || smf[2] != 104 || smf[3] != 100)
 			return "Not Sandard MIDI File.";
 		var data = new Object;
@@ -1235,7 +1249,7 @@ var PicoAudio = (function(){
 						if(lastState == null)
 							return "Irregular SMF.";
 						p--;
-						smf[p] = lastState; // TODO 上書きしないようにしたい
+						smf[p] = lastState; // 上書き
 						lastState = null;
 					}
 				}
@@ -1265,6 +1279,9 @@ var PicoAudio = (function(){
 			if(!this.settings.isSkipEnding && songLength<time) songLength = time;
 		}
 
+		if (this.debug) {
+			var syoriTimeS2 = Date.now();
+		}
 		// Midi Events (0x8n - 0xEn) parse
 		for(var ch=0; ch<channels.length; ch++){
 			var channel = channels[ch];
@@ -1490,7 +1507,9 @@ var PicoAudio = (function(){
 				}
 				p++;
 			}
-			delete channel.messages;
+			if (!this.debug) {
+				delete channel.messages;
+			}
 		}
 		if(this.settings.isSkipEnding) songLength = lastNoteOffTiming;
 		tempoTrack.push({ timing:songLength, value:120 });
@@ -1522,6 +1541,13 @@ var PicoAudio = (function(){
 			value = (value<<7) + arr[i];
 			i++;
 			return [value, i];
+		}
+		if (this.debug) {
+			var syoriTimeE = Date.now();
+			console.log("parseSMF time", syoriTimeE - syoriTimeS);
+			console.log("parseSMF(1/2) time", syoriTimeS2 - syoriTimeS);
+			console.log("parseSMF(2/2) time", syoriTimeE - syoriTimeS2);
+			console.log(data);
 		}
 		return data;
 	};
