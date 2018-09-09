@@ -119,7 +119,7 @@ var PicoAudio = (function(){
 			}
 		}
 		var note = this.createBaseNote(option, true, false, nonStop);
-		if(note.isGainValueZero) return function(){};
+		if(note.isGainValueZero) return null;
 
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
@@ -242,7 +242,7 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.createPercussionNote = function(option){
 		var note = this.createBaseNote(option, false);
-		if(note.isGainValueZero) return function(){};
+		if(note.isGainValueZero) return null;
 
 		var source = note.oscillator;
 		var gainNode = note.gainNode;
@@ -431,10 +431,11 @@ var PicoAudio = (function(){
 		var that = this;
 		var channel = nonChannel ? 0 : (option.channel || 0);
 		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] != null ? this.channels[channel][2] : 1)) * settings.generateVolume;
-		var gainNode = context.createGain();
 		var isGainValueZero = true;
 
+		if(velocity<=0) return {isGainValueZero: true};
 		var gainValue = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+		var gainNode = context.createGain();
 		gainNode.gain.value = gainValue;
 		if(isExpression){
 			option.expression ? option.expression.forEach(function(p){
@@ -450,7 +451,7 @@ var PicoAudio = (function(){
 		}
 
 		if(isGainValueZero){ // 音量が常に0なら音を鳴らさない
-			return {isGainValueZero: isGainValueZero};
+			return {isGainValueZero: true};
 		}
 
 		var start = this.getTime(option.start) + songStartTime;
@@ -646,7 +647,7 @@ var PicoAudio = (function(){
 			panNode: panNode,
 			gainNode: gainNode,
 			noiseCutGainNode: noiseCutGainNode,
-			isGainValueZero: isGainValueZero
+			isGainValueZero: false
 		};
 	};
 
@@ -838,9 +839,11 @@ var PicoAudio = (function(){
 			if(hashedDataList && hashedDataList[idx]){
 				hashedDataList[idx].forEach(function(note){
 					if(!settings.isWebMIDI) {
+						var stopFunc = note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note);
+						if(!stopFunc) return;
 						that.pushFunc({
 							note: note,
-							stopFunc: note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note)
+							stopFunc: stopFunc
 						});
 					}
 					var noteOn = setTimeout(function(){
