@@ -23,7 +23,9 @@ var PicoAudio = (function(){
 			loop: false,
 			isSkipBeginning: false, // 冒頭の余白をスキップ
 			isSkipEnding: true, // 末尾の空白をスキップ
-			holdOnValue: 64
+			holdOnValue: 64,
+			maxPolyphony: -1, // 同時発音数 -1:infinity
+			maxPercussionPolyphony: -1 // 同時発音数(パーカッション) -1:infinity
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
 		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
@@ -839,6 +841,26 @@ var PicoAudio = (function(){
 			states.playIndex = idx;
 			if(hashedDataList && hashedDataList[idx]){
 				hashedDataList[idx].forEach(function(note){
+					// Retro Mode
+					if(that.settings.maxPolyphony!=-1||that.settings.maxPercussionPolyphony!=-1){
+						var polyCnt=0, percCnt=0;
+						that.states.stopFuncs.forEach(function(tar){
+							if(!tar.note) return false;
+							if(tar.note.channel!=9){
+								if(note.start>=tar.note.start&&note.start<tar.note.stop){
+									polyCnt++;
+								}
+							} else {
+								if(note.start==tar.note.start){
+									percCnt++;
+								}
+							}
+						});
+						if((note.channel!=9&&polyCnt>=that.settings.maxPolyphony)
+							||(note.channel==9&&percCnt>=that.settings.maxPercussionPolyphony)){
+							return;
+						}
+					}
 					if(!settings.isWebMIDI) {
 						var stopFunc = note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note);
 						if(!stopFunc) return;
