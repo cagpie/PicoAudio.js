@@ -841,27 +841,28 @@ var PicoAudio = (function(){
 			states.playIndex = idx;
 			if(hashedDataList && hashedDataList[idx]){
 				hashedDataList[idx].forEach(function(note){
-					// Retro Mode
-					if(that.settings.maxPolyphony!=-1||that.settings.maxPercussionPolyphony!=-1){
-						var polyCnt=0, percCnt=0;
-						that.states.stopFuncs.forEach(function(tar){
-							if(!tar.note) return false;
-							if(tar.note.channel!=9){
-								if(note.start>=tar.note.start&&note.start<tar.note.stop){
-									polyCnt++;
-								}
-							} else {
-								if(note.start==tar.note.start){
-									percCnt++;
-								}
-							}
-						});
-						if((note.channel!=9&&polyCnt>=that.settings.maxPolyphony)
-							||(note.channel==9&&percCnt>=that.settings.maxPercussionPolyphony)){
-							return;
-						}
-					}
 					if(!settings.isWebMIDI) {
+						// Retro Mode
+						if(that.settings.maxPolyphony!=-1||that.settings.maxPercussionPolyphony!=-1){
+							var polyCnt=0, percCnt=0;
+							that.states.stopFuncs.forEach(function(tar){
+								if(!tar.note) return false;
+								if(tar.note.channel!=9){
+									if(note.start>=tar.note.start&&note.start<tar.note.stop){
+										polyCnt++;
+									}
+								} else {
+									if(note.start==tar.note.start){
+										percCnt++;
+									}
+								}
+							});
+							if((note.channel!=9&&polyCnt>=that.settings.maxPolyphony)
+								||(note.channel==9&&percCnt>=that.settings.maxPercussionPolyphony)){
+								return;
+							}
+						}
+						// Create Note
 						var stopFunc = note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note);
 						if(!stopFunc) return;
 						that.pushFunc({
