@@ -196,9 +196,8 @@ var PicoAudio = (function(){
 			{
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
-				gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
-				gainNode.gain.setValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
-				gainNode.gain.linearRampToValueAtTime(0.0, note.start+1.5+note.velocity*3);
+				var decay = (128-option.pitch)/64;
+				gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
 				break;
 			}
 			// ギター系
@@ -228,7 +227,10 @@ var PicoAudio = (function(){
 				that.stopAudioNode(oscillator, 0, gainNode);
 			}
 			default:{
-				//gainNode.gain.setValueAtTime(note.velocity, note.start);
+				gainNode.gain.value *= 1.1;
+				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
+				var decay = (128-option.pitch)/64;
+				gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
 			}
 		}
 
@@ -437,22 +439,27 @@ var PicoAudio = (function(){
 		var isGainValueZero = true;
 
 		if(velocity<=0) return {isGainValueZero: true};
-		var gainValue = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
-		var gainNode = context.createGain();
-		gainNode.gain.value = gainValue;
+		var expGainValue = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+		var expGainNode = context.createGain();
+		expGainNode.gain.value = expGainValue;
 		if(isExpression){
 			option.expression ? option.expression.forEach(function(p){
 				var v = velocity * (p.value / 127);
 				if(v > 0) isGainValueZero = false;
-				gainNode.gain.setValueAtTime(
+				expGainNode.gain.setValueAtTime(
 					v,
 					that.getTime(p.timing) + songStartTime
 				);
 			}) : false;
 		} else {
-			if(gainValue > 0) isGainValueZero = false;
+			if(expGainValue > 0){
+				isGainValueZero = false;
+				expGainNode.gain.setValueAtTime(
+					velocity,
+					this.getTime(option.start) + songStartTime
+				);
+			}
 		}
-
 		if(isGainValueZero){ // 音量が常に0なら音を鳴らさない
 			return {isGainValueZero: true};
 		}
@@ -463,6 +470,7 @@ var PicoAudio = (function(){
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
 		var panNode = context.createStereoPanner ? context.createStereoPanner() :
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
+		var gainNode = context.createGain();
 		var noiseCutGainNode = context.createGain();
 
 		if(!context.createStereoPanner && context.createPanner) {
@@ -552,10 +560,11 @@ var PicoAudio = (function(){
 				}
 			}
 			oscillator.connect(panNode);
-			panNode.connect(gainNode);
+			panNode.connect(expGainNode);
 		} else {
-			oscillator.connect(gainNode);
+			oscillator.connect(expGainNode);
 		}
+		expGainNode.connect(gainNode);
 		gainNode.connect(noiseCutGainNode);
 		noiseCutGainNode.connect(this.masterGainNode);
 		this.masterGainNode.connect(context.destination);
