@@ -1111,13 +1111,12 @@ var PicoAudio = (function(){
 		var data = new Object;
 		var p = 4;
 		var header = new Object();
-		header.size = getInt(smf.subarray(4, 8));
+		header.size = this.getInt(smf, 4, 8);
 		header.format = smf[9];
-		header.trackcount = getInt(smf.subarray(10, 12));
+		header.trackcount = this.getInt(smf, 10, 12);
 		header.timemanage = smf[12];
-		header.resolution = getInt(smf.subarray(12, 14));
+		header.resolution = this.getInt(smf, 12, 14);
 		p += 4+header.size;
-		//var tracks = new Array();
 		var tempoTrack = new Array();
 		var beatTrack = new Array();
 		var channels = new Array();
@@ -1127,7 +1126,15 @@ var PicoAudio = (function(){
 		for(var i=0; i<16; i++){
 			var channel = new Object();
 			channels.push(channel);
-			channel.messages = [];
+			// smfを読む順番を記録した索引配列を作る
+			// 型付き配列をリスト構造のように使う（リスト構造にすることで挿入処理を高速化する）
+			// [time, smfPtr, nextIndicesPtr, time, smfPtr, nextIndicesPtr, ...]
+			channel.indices = new Int32Array(smf.length);
+			channel.indicesLength = 0;
+			channel.indicesHead = -1; // 先頭のポインタ
+			channel.indicesFoot = 0; // 末尾のポインタ
+			channel.indicesCur = 0; // 現在のinsert用ポインタ
+			channel.indicesPre = 0; // 前回のinsert用ポインタ
 			channel.notes = [];
 		}
 		var songLength = 0;
@@ -1136,19 +1143,14 @@ var PicoAudio = (function(){
 			if(smf[p] != 77 || smf[p+1] != 84 || smf[p+2] != 114 || smf[p+3] != 107)
 				return "Irregular SMF.";
 			p += 4;
-			var track = new Object();
-			//tracks.push(track);
-			//track.size = getInt(smf.subarray(p, p+4));
-			//p += 4;
-			//track.notes = [];
-			var endPoint = p+4 + getInt(smf.subarray(p, p+4));
+			var endPoint = p+4 + this.getInt(smf, p, p+4);
 			p += 4;
 			var time = 0;
 			var lastState = 1;
 			while(p<endPoint){
 				// DeltaTime
 				if(lastState!=null){
-					var lengthAry = variableLengthToInt(smf.subarray(p, p+5));
+					var lengthAry = this.variableLengthToInt(smf, p, p+5);
 					var dt = lengthAry[0];
 					time += dt;
 					p += lengthAry[1];
@@ -1156,40 +1158,24 @@ var PicoAudio = (function(){
 				// WebMIDIAPI
 				if(this.settings.isWebMIDI) var cashP = p;
 				// Events
-				var mesIdx;
-				var mesObj = {timing:time, mes:[]};
 				switch(Math.floor(smf[p]/0x10)){
 					case 0x8: // Note OFF - 8[ch], Pitch, Velocity
 					case 0x9: // Note ON - 9[ch], Pitch, Velocity
 					case 0xA: // Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
 					case 0xB: // Control Change - B[ch],,
 					case 0xE: // PitchBend Change - E[ch],,
-						lastState = smf[p];
 						// チャンネル毎に仕分けた後に解析する
-						mesObj.mes.push(smf[p], smf[p+1], smf[p+2]);
-						// デルタタイムの順番になるように配列に挿入
-						var channelMessages = channels[lastState&0x0F].messages;
-						for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
-							var tempMesObj = channelMessages[mesIdx];
-							if (time >= tempMesObj.timing) break;
-						}
-						mesIdx++;
-						channelMessages.splice(mesIdx, 0, mesObj);
+						lastState = smf[p];
+						var ch = channels[lastState&0x0F];
+						this.chIndicesSplice(ch, time, p); // デルタタイムの順番になるようにリスト配列に挿入
 						p+=3;
 						break;
 					case 0xC: // Program Change - C[ch],
 					case 0xD: // Channel Pre - D[ch],
-						lastState = smf[p];
 						// チャンネル毎に仕分けた後に解析する
-						mesObj.mes.push(smf[p], smf[p+1]);
-						// デルタタイムの順番になるように配列に挿入
-						var channelMessages = channels[lastState&0x0F].messages;
-						for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
-							var tempMesObj = channelMessages[mesIdx];
-							if (time >= tempMesObj.timing) break;
-						}
-						mesIdx++;
-						channelMessages.splice(mesIdx, 0, mesObj);
+						lastState = smf[p];
+						var ch = channels[lastState&0x0F];
+						this.chIndicesSplice(ch, time, p); // デルタタイムの順番になるようにリスト配列に挿入
 						p+=2;
 						break;
 					// SysEx Events or Meta Events - F[ch], ...
@@ -1199,22 +1185,15 @@ var PicoAudio = (function(){
 							case 0xF0:
 							case 0xF7:
 								// SysEx Events
-								var lengthAry = variableLengthToInt(smf.subarray(p+1, p+1+4));
+								var lengthAry = this.variableLengthToInt(smf, p+1, p+1+4);
 
 								// Master Volume
+								// 0xF0, size, 0x7f, 0x7f, 0x04, 0x01, 0xNN, volume, 0xF7
 								if(lengthAry[0]>=7 && smf[p+2]==0x7f && smf[p+3]==0x7f && smf[p+4]==0x04 && smf[p+5]==0x01){
 									// 全チャンネルにMasterVolumeメッセージを挿入する
 									for(var i=0; i<16; i++) {
-										// 0xF0, 6(length), 0x7f, 0x7f, 0x04, 0x01, 0xNN, volume
-										mesObj.mes.push(smf[p], lengthAry[0]-1, smf[p+2], smf[p+3], smf[p+4], smf[p+5], smf[p+6], smf[p+7]);
-										// デルタタイムの順番になるように配列に挿入
-										var channelMessages = channels[i].messages;
-										for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
-											var tempMesObj = channelMessages[mesIdx];
-											if(time >= tempMesObj.timing) break;
-										}
-										mesIdx++;
-										channelMessages.splice(mesIdx, 0, mesObj);
+										var ch = channels[i];
+										this.chIndicesSplice(ch, time, p); // デルタタイムの順番になるように配列に挿入
 									}
 								}
 
@@ -1274,7 +1253,7 @@ var PicoAudio = (function(){
 									case 0x7F:
 										break;
 								}
-								var lengthAry = variableLengthToInt(smf.subarray(p+2, p+2+4));
+								var lengthAry = this.variableLengthToInt(smf, p+2, p+2+4);
 								p+=2+lengthAry[1]+lengthAry[0];
 								break;
 							}
@@ -1296,7 +1275,7 @@ var PicoAudio = (function(){
 						if(state==0xF0 || state==0xF7){
 							if(this.settings.WebMIDIPortSysEx){
 								// 長さ情報を取り除いて純粋なSysExメッセージにする
-								var lengthAry = variableLengthToInt(smf.subarray(cashP+1, cashP+1+4));
+								var lengthAry = this.variableLengthToInt(smf, cashP+1, cashP+1+4);
 								var sysExStartP = cashP+1+lengthAry[1];
 								var sysExEndP = sysExStartP+lengthAry[0];
 								var webMIDIMes = new Uint8Array(1 + lengthAry[0]);
@@ -1313,16 +1292,20 @@ var PicoAudio = (function(){
 				}
 			}
 			if(!this.settings.isSkipEnding && songLength<time) songLength = time;
+			// リスト配列のポインタを初期化
+			for(var i=0; i<16; i++){
+				channels[i].indicesCur = channels[i].indicesHead;
+				channels[i].indicesPre = channels[i].indicesHead;
+			}
 		}
 
 		if (this.debug) {
 			var syoriTimeS2 = Date.now();
+			console.log("parseSMF(1/2) time", syoriTimeS2 - syoriTimeS);
 		}
 		// Midi Events (0x8n - 0xEn) parse
 		for(var ch=0; ch<channels.length; ch++){
 			var channel = channels[ch];
-			var p = 0;
-			var endPoint = channel.messages.length;
 			var dataEntry = 2;
 			var pitchBend = 0;
 			var pan = 64;
@@ -1339,18 +1322,20 @@ var PicoAudio = (function(){
 			var instrument = null;
 			var masterVolume = 127;
 			var nowNoteOnIdxAry = [];
-			while(p<endPoint){
-				var mesObj = channel.messages[p];
+			var indIdx = channel.indicesHead;
+			var indices = channel.indices;
+			while(indIdx!=-1){
 				// DeltaTime
-				var time = mesObj.timing;
+				var time = indices[indIdx];
+				var p = indices[indIdx+1];
+				var nextIdx = indices[indIdx+2];
 				// Events
-				var mes = channel.messages[p].mes;
-				switch(Math.floor(mes[0]/0x10)){
+				switch(Math.floor(smf[p]/0x10)){
 					// Note OFF - 8[ch], Pitch, Velocity
 					case 0x8:
 						nowNoteOnIdxAry.some(function(idx,i){
 							var note = channel.notes[idx];
-							if(note.pitch==mes[1] && note.stop==null){
+							if(note.pitch==smf[p+1] && note.stop==null){
 								if(hold>=that.settings.holdOnValue){
 									if (note.holdBeforeStop==null){
 										note.holdBeforeStop = [{
@@ -1360,7 +1345,10 @@ var PicoAudio = (function(){
 									}
 								} else {
 									note.stop = time;
-									nowNoteOnIdxAry.splice(i, 1);
+									// nowNoteOnIdxAry.splice(i, 1); を軽量化
+									if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+									else if(i == 0) nowNoteOnIdxAry.shift();
+									else nowNoteOnIdxAry.splice(i, 1);
 								}
 								if(time > lastNoteOffTiming){
 									lastNoteOffTiming = time;
@@ -1371,15 +1359,15 @@ var PicoAudio = (function(){
 						break;
 					// Note ON - 9[ch], Pitch, Velocity
 					case 0x9:
-						if(mes[2]!=0){
+						if(smf[p+2]!=0){
 							var note = {
 								start: time,
 								stop: null,
-								pitch: mes[1],
+								pitch: smf[p+1],
 								pitchBend: [{timing:time,value:pitchBend}],
 								pan: [{timing:time,value:pan}],
 								expression: [{timing:time,value:expression*(masterVolume/127)}],
-								velocity: (mes[2]/127)*(velocity/127),
+								velocity: (smf[p+2]/127)*(velocity/127),
 								modulation: [{timing:time,value:modulation}],
 								holdBeforeStop: null,
 								reverb: [{timing:time,value:reverb}],
@@ -1390,9 +1378,12 @@ var PicoAudio = (function(){
 							// If this note is NoteOn, change to NoteOFF.
 							nowNoteOnIdxAry.some(function(idx,i){
 								var note = channel.notes[idx];
-								if(note.pitch == mes[1] && note.stop==null){
+								if(note.pitch == smf[p+1] && note.stop==null){
 									note.stop = time;
-									nowNoteOnIdxAry.splice(i, 1);
+									// nowNoteOnIdxAry.splice(i, 1); を軽量化
+									if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+									else if(i == 0) nowNoteOnIdxAry.shift();
+									else nowNoteOnIdxAry.splice(i, 1);
 								}
 							});
 							nowNoteOnIdxAry.push(channel.notes.length);
@@ -1406,7 +1397,7 @@ var PicoAudio = (function(){
 						} else {
 							nowNoteOnIdxAry.some(function(idx,i){
 								var note = channel.notes[idx];
-								if(note.pitch==mes[1] && note.stop==null){
+								if(note.pitch==smf[p+1] && note.stop==null){
 									if(hold>=that.settings.holdOnValue){
 										if (note.holdBeforeStop==null){
 											note.holdBeforeStop = [{
@@ -1416,7 +1407,10 @@ var PicoAudio = (function(){
 										}
 									} else {
 										note.stop = time;
-										nowNoteOnIdxAry.splice(i, 1);
+										// nowNoteOnIdxAry.splice(i, 1); を軽量化
+										if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+										else if(i == 0) nowNoteOnIdxAry.shift();
+										else nowNoteOnIdxAry.splice(i, 1);
 									}
 									if(time > lastNoteOffTiming){
 										lastNoteOffTiming = time;
@@ -1431,9 +1425,9 @@ var PicoAudio = (function(){
 						break;
 					// Control Change - B[ch],,
 					case 0xB:
-						switch(mes[1]){
+						switch(smf[p+1]){
 							case 1:
-								modulation = mes[2];
+								modulation = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.modulation.push({
@@ -1445,28 +1439,28 @@ var PicoAudio = (function(){
 							case 6:
 								if(rpnLsb==0 && rpnMsb==0){
 									// RLSB=0 & RMSB=0 -> 6はピッチ
-									dataEntry = mes[2];
+									dataEntry = smf[p+2];
 									if(dataEntry > 24){
 										dataEntry = 24;
 									}
 								}
 								if(nrpnLsb==8 && nrpnMsb==1){
 									// (保留)ビブラート・レイト(GM2/GS/XG)
-									//console.log("CC  8 1 6 "+mes[2]+" time:"+time);
+									//console.log("CC  8 1 6 "+smf[p+2]+" time:"+time);
 								} else if(nrpnLsb==9 && nrpnMsb==1){
 									// (保留)ビブラート・デプス(GM2/GS/XG)
-									//console.log("CC  9 1 6 "+mes[2]+" time:"+time);
+									//console.log("CC  9 1 6 "+smf[p+2]+" time:"+time);
 								} else if(nrpnLsb==10 && nrpnMsb==1){
 									// (保留)ビブラート・ディレイ(GM2/GS/XG)
-									//console.log("CC 10 1 6 "+mes[2]+" time:"+time);
+									//console.log("CC 10 1 6 "+smf[p+2]+" time:"+time);
 								}
 								break;
 							case 7:
-								velocity = mes[2];
+								velocity = smf[p+2];
 								break;
 							case 10:
 								//Pan
-								pan = mes[2];
+								pan = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.pan.push({
@@ -1477,7 +1471,7 @@ var PicoAudio = (function(){
 								break;
 							case 11:
 								//Expression
-								expression = mes[2];
+								expression = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.expression.push({
@@ -1488,20 +1482,23 @@ var PicoAudio = (function(){
 								break;
 							case 64:
 								//Hold1
-								hold = mes[2];
-								for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
-									var idx = nowNoteOnIdxAry[i];
-									var note = channel.notes[idx];
-									if(hold<this.settings.holdOnValue){
+								hold = smf[p+2];
+								if(hold<this.settings.holdOnValue){
+									for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
+										var idx = nowNoteOnIdxAry[i];
+										var note = channel.notes[idx];
 										if(note.stop==null && note.holdBeforeStop!=null){
 											note.stop = time;
-											nowNoteOnIdxAry.splice(i, 1);
+											// nowNoteOnIdxAry.splice(i, 1); を軽量化
+											if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+											else if(i == 0) nowNoteOnIdxAry.shift();
+											else nowNoteOnIdxAry.splice(i, 1);
 										}
 									}
 								}
 								break;
 							case 91:
-								reverb = mes[2];
+								reverb = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.reverb.push({
@@ -1511,7 +1508,7 @@ var PicoAudio = (function(){
 								});
 								break;
 							case 93:
-								chorus = mes[2];
+								chorus = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.chorus.push({
@@ -1521,16 +1518,16 @@ var PicoAudio = (function(){
 								});
 								break;
 							case 98:
-								nrpnLsb = mes[2];
+								nrpnLsb = smf[p+2];
 								break;
 							case 99:
-								nrpnMsb = mes[2];
+								nrpnMsb = smf[p+2];
 								break;
 							case 100:
-								rpnLsb = mes[2];
+								rpnLsb = smf[p+2];
 								break;
 							case 101:
-								rpnMsb = mes[2];
+								rpnMsb = smf[p+2];
 								break;
 							case 111: // RPGツクール用ループ
 								if(cc111Time == -1){
@@ -1541,14 +1538,14 @@ var PicoAudio = (function(){
 						break;
 					// Program Change - C[ch],
 					case 0xC:
-						instrument = mes[1];
+						instrument = smf[p+1];
 						break;
 					// Channel Pre - D[ch],
 					case 0xD:
 						break;
 					// PitchBend Change - E[ch],,
 					case 0xE:
-						pitchBend = ((mes[2]*128+mes[1])-8192)/8192*dataEntry;
+						pitchBend = ((smf[p+2]*128+smf[p+1])-8192)/8192*dataEntry;
 						nowNoteOnIdxAry.forEach(function(idx){
 							var note = channel.notes[idx];
 							note.pitchBend.push({
@@ -1559,12 +1556,12 @@ var PicoAudio = (function(){
 						break;
 					case 0xF:
 						//lastState = smf[p]; <- ランニングナントカは無いらしい
-						switch(mes[0]){
+						switch(smf[p]){
 							case 0xF0:
 							case 0xF7:
 								// Master Volume
-								if(mes[1]>=6 && mes[2]==0x7f && mes[3]==0x7f && mes[4]==0x04 && mes[5]==0x01){
-									var vol = mes[7];
+								if(smf[p+1]==0x7f && smf[p+2]==0x7f && smf[p+3]==0x04 && smf[p+4]==0x01){
+									var vol = smf[p+6];
 									if(vol > 127) vol = 127;
 									masterVolume = vol;
 									nowNoteOnIdxAry.forEach(function(idx){
@@ -1582,11 +1579,11 @@ var PicoAudio = (function(){
 						return "Error parseSMF.";
 					}
 				}
-				p++;
+				indIdx = nextIdx;
 			}
 			channel.nowNoteOnIdxAry = nowNoteOnIdxAry;
 			if (!this.debug) {
-				delete channel.messages;
+				delete channel.indices;
 			}
 		}
 		if(this.settings.isSkipEnding) songLength = lastNoteOffTiming;
@@ -1601,16 +1598,23 @@ var PicoAudio = (function(){
 				if(note.stop==null){
 					note.stop = lastNoteOffTiming;
 					// If (note.cc[x].timing > lastNoteOffTiming), delete note.cc[x]
-					var arr = ["pitchBend", "pan", "expression", "modulation", "reverb", "chorus"];
-					arr.forEach(function(name){
-						for(var i2=note[name].length-1; i2>=1; i2--){
-							var obj = note[name][i2];
+					var nameAry = ["pitchBend", "pan", "expression", "modulation", "reverb", "chorus"];
+					nameAry.forEach(function(name){
+						var ccAry = note[name]
+						for(var i2=ccAry.length-1; i2>=1; i2--){
+							var obj = ccAry[i2];
 							if(obj.timing>lastNoteOffTiming){
-								note[name].splice(i2, 1);
+								// ccAry.splice(i2, 1); を軽量化
+								if(i2 == ccAry.length-1) ccAry.pop();
+								else if(i2 == 0) ccAry.shift();
+								else ccAry.splice(i2, 1);
 							}
 						}
 					});
-					nowNoteOnIdxAry.splice(i, 1);
+					// nowNoteOnIdxAry.splice(i, 1); を軽量化
+					if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+					else if(i == 0) nowNoteOnIdxAry.shift();
+					else nowNoteOnIdxAry.splice(i, 1);
 				}
 			}
 			delete channel.nowNoteOnIdxAry;
@@ -1626,24 +1630,6 @@ var PicoAudio = (function(){
 		data.lastNoteOffTiming = lastNoteOffTiming;
 		if(this.settings.isWebMIDI) data.messages = messages;
 
-		function getInt(arr){
-			var value = 0;
-			for (var  i=0;i<arr.length;i++){
-				value = (value << 8) + arr[i];
-			}
-			return value;
-		}
-		function variableLengthToInt(arr) {
-			var i = 0;
-			var value = 0;
-			while(i<arr.length-1 && arr[i]>=0x80){
-				if (i < 4) value = (value<<7) + (arr[i]-0x80);
-				i++;
-			}
-			value = (value<<7) + arr[i];
-			i++;
-			return [value, i];
-		}
 		if (this.debug) {
 			var syoriTimeE = Date.now();
 			console.log("parseSMF time", syoriTimeE - syoriTimeS);
@@ -1652,6 +1638,71 @@ var PicoAudio = (function(){
 			console.log(data);
 		}
 		return data;
+	};
+
+	PicoAudio.prototype.getInt = function(arr, s, e){
+		var value = 0;
+		for (var i=s; i<e; i++){
+			value = (value << 8) + arr[i];
+		}
+		return value;
+	};
+
+	PicoAudio.prototype.variableLengthToInt = function(arr, s, e){
+		var i = s;
+		var value = 0;
+		while(i<e-1 && arr[i]>=0x80){
+			if (i < s+4) value = (value<<7) + (arr[i]-0x80);
+			i++;
+		}
+		value = (value<<7) + arr[i];
+		i++;
+		return [value, i-s];
+	};
+
+	PicoAudio.prototype.chIndicesSplice = function(ch, time, p){
+		var indices = ch.indices;
+		// メモリー足りなくなったら拡張
+		if(indices.length <= ch.indicesLength+6){
+			var temp = new Int32Array(indices.length*2);
+			for(var i=indices.length-1; i>=0; i--){
+				temp[i] = indices[i];
+			}
+			ch.indices = indices = temp;
+		}
+		// デルタタイムの順番になるようにリスト配列に挿入
+		if(ch.indicesLength>=3 && time<indices[ch.indicesFoot]){
+			// Insert
+			while(ch.indicesCur != -1){
+				if(time<indices[ch.indicesCur]){
+					if(ch.indicesCur==ch.indicesHead){
+						ch.indicesHead = ch.indicesLength;
+					} else {
+						indices[ch.indicesPre+2] = ch.indicesLength;
+					}
+					indices[ch.indicesLength] = time;
+					indices[ch.indicesLength+1] = p;
+					indices[ch.indicesLength+2] = ch.indicesCur;
+					ch.indicesPre = ch.indicesLength;
+					ch.indicesLength += 3;
+					break;
+				}
+				ch.indicesPre = ch.indicesCur;
+				ch.indicesCur = indices[ch.indicesCur+2];
+			}
+		} else {
+			// Push
+			if(ch.indicesLength>=3){
+				indices[ch.indicesFoot+2] = ch.indicesLength;
+			} else {
+				ch.indicesHead = 0;
+			}
+			ch.indicesFoot = ch.indicesLength;
+			indices[ch.indicesLength] = time;
+			indices[ch.indicesLength+1] = p;
+			indices[ch.indicesLength+2] = -1;
+			ch.indicesLength += 3;
+		}
 	};
 
 	PicoAudio.prototype.stopAudioNode = function(tar, time, gainNode){
