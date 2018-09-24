@@ -448,7 +448,7 @@ var PicoAudio = (function(){
 			option.expression ? option.expression.forEach(function(p){
 				var v = velocity * (p.value / 127);
 				if(v > 0) isGainValueZero = false;
-				expGainNode.gain.setValueAtTime(
+				expGainNode.gain.setValueAtTime( // TODO 再生位置変えると、マイナスになってエラーになる
 					v,
 					p.time + songStartTime
 				);
@@ -721,7 +721,7 @@ var PicoAudio = (function(){
 		this.stop(isSongLooping);
 		var tempwebMIDIStopTime = this.states.webMIDIStopTime;
 		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
-			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:0, updateBufMaxTime:20, updateIntervalTime:0 };
+			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:this.states.updateBufTime, updateBufMaxTime:20, updateIntervalTime:0 };
 		this.states.webMIDIStopTime = tempwebMIDIStopTime; // 値を初期化しない
 		if(this.settings.isWebMIDI && !isLight){
 			if(isSongLooping)
@@ -853,26 +853,74 @@ var PicoAudio = (function(){
 		});
 		//setInterval(function(){console.log(that.states.stopFuncs);},5000);
 		var updateNowTime = performance.now();
-		var updatePreTime = performance.now();
-		that.states.updateBufSum = 10*30;
-		that.states.updateBufCnt = 30;
+		var updatePreTime = updateNowTime - that.states.updateBufTime;
+		var pPreTime = performance.now(); // previous performance.now()
+		var cPreTime = context.currentTime * 1000; // previous AudioContext.currentTime
+		var pTimeSum = 0;
+		var cTimeSum = 0;
+		var latencyLimitTime = 0;
+		var cnt=0;
 		(function updateNote(updatePreTime){
-			// ノートを先読み度合いを自動調整（予約しすぎると重くなる）
 			var updateNowTime = performance.now();
 			var updateBufTime = updateNowTime - updatePreTime;
+
+			// サウンドが重くないか監視（フリーズ対策）
+			var pTime = updateNowTime;
+			var cTime = context.currentTime * 1000;
+			pTimeSum += pTime - pPreTime;
+			cTimeSum += cTime - cPreTime;
+			pPreTime = pTime;
+			cPreTime = cTime;
+			var latencyTime = pTimeSum - cTimeSum;
+			that.states.latencyTime = latencyTime;
+			if(latencyTime >= 30){ // currentTimeが遅い（サウンドが重い）
+				latencyLimitTime += latencyTime;
+				cTimeSum += 30;
+			} else if(latencyTime <= -30){ // currentTimeが遅い
+				cTimeSum = pTimeSum;
+			} else {
+				if(latencyLimitTime>0){ //
+					latencyLimitTime -= updateBufTime*0.01;
+					if(latencyLimitTime < 0) latencyLimitTime = 0;
+				}
+			}
+
+			// ノートを先読み度合いを自動調整（予約しすぎると重くなる）
 			var tempTime = that.states.updateIntervalTime;
 			that.states.updateIntervalTime = updateBufTime;
-			updateBufTime += tempTime/15;
+			updateBufTime += tempTime/15 + (that.isFirefox() && !that.isAndroid() ? 10 : 0);
 			if(that.states.updateBufTime < updateBufTime){
 				that.states.updateBufTime = updateBufTime;
 			} else {
 				that.states.updateBufTime -= that.states.updateBufTime*0.001;
 			}
 			if(that.states.updateBufTime > that.states.updateBufMaxTime){
-				var tempTime = updateBufTime - that.states.updateBufMaxTime;
-				that.states.updateBufTime = that.states.updateBufMaxTime;
-				that.states.updateBufMaxTime += tempTime/2;
+				if(updateBufTime >= 900){ // バックグラウンドっぽい
+					that.states.updateBufMaxTime += updateBufTime;
+				} else { // 通常
+					var tempTime = updateBufTime - that.states.updateBufMaxTime;
+					that.states.updateBufTime = that.states.updateBufMaxTime;
+					if(that.states.updateBufMaxTime<30){
+						that.states.updateBufMaxTime *= 1.1;
+					} else {
+						that.states.updateBufMaxTime += tempTime/3;
+					}
+				}
+				if(that.states.updateBufMaxTime > 1200) that.states.updateBufMaxTime = 1200;
 			}
+
+			// サウンドが重かったか
+			that.states.latencyLimitTime = latencyLimitTime;
+			if(latencyLimitTime >= 200){ // サウンドが重いのが続いている
+				cTimeSum = pTimeSum;
+				latencyLimitTime = 0;
+				// ノート先読みを小さくする（フリーズ対策）
+				that.states.updateBufMaxTime = 1;
+				that.states.updateBufTime = 1;
+				updateBufTime = 1;
+			}
+
+			// 再生処理
 			for(var ch=0; ch<16; ch++){
 				var notes = that.playData.channels[ch].notes;
 				var idx = that.states.playIndices[ch];
@@ -954,17 +1002,37 @@ var PicoAudio = (function(){
 			// 		}
 			// 	});
 			// }
-			var reserve = setTimeout(function(){
-				updateNote(updateNowTime);
-				that.clearFunc("rootTimeout", reserve);
-			}, 1);
-			that.pushFunc({
-				rootTimeout: reserve,
-				stopFunc: function(){ clearTimeout(reserve); }
-			});
+			if(true){ // setInterval
+				if(cnt==0){
+					var reserve = setInterval(function(){
+						updateNowTime = updateNote(updateNowTime);
+					}, 1);
+					(function(reserve){
+						that.pushFunc({
+							rootTimeout: reserve,
+							stopFunc: function(){ clearInterval(reserve); }
+						});
+					})(reserve);
+				}
+			} else { // setTimeout
+				if(cnt==0){
+					var reserve = setTimeout(function(){
+						updateNote(updateNowTime);
+						that.clearFunc("rootTimeout", reserve);
+					}, 1);
+					(function(reserve){
+						that.pushFunc({
+							rootTimeout: reserve,
+							stopFunc: function(){ clearTimeout(reserve); }
+						});
+					})(reserve);
+				}
+			}
+			cnt++;
 			// 	trigger.songEnd(); // TODO
 			preTime = performance.now();
 			preTimeC = context.currentTime;
+			return updateNowTime;
 		})(updateNowTime);
 	};
 
@@ -1101,6 +1169,11 @@ var PicoAudio = (function(){
 	PicoAudio.prototype.isAndroid = function(){
 		var u = navigator.userAgent.toLowerCase();
 		return u.indexOf("android") != -1 && u.indexOf("windows") == -1;
+	};
+
+	PicoAudio.prototype.isFirefox = function(){
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("firefox") != -1;
 	};
 
 	PicoAudio.prototype.getTime = function(timing){
