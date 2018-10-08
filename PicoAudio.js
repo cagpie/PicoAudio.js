@@ -14,7 +14,7 @@ var PicoAudio = (function(){
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
 			WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない？)
-			isReverb: !this.isAndroid(), // Android以外はリバーブON
+			isReverb: this.isDefaultReverb(), // リバーブONにするか
 			reverbVolume: 1.5,
 			isChorus: true,
 			chorusVolume: 0.5,
@@ -24,12 +24,14 @@ var PicoAudio = (function(){
 			isSkipBeginning: false, // 冒頭の余白をスキップ
 			isSkipEnding: true, // 末尾の空白をスキップ
 			holdOnValue: 64,
-			maxPolyphony: -1, // 同時発音数 -1:infinity
-			maxPercussionPolyphony: -1 // 同時発音数(パーカッション) -1:infinity
+			maxPoly: -1, // 同時発音数 -1:infinity
+			maxPercPoly: -1, // 同時発音数(パーカッション) -1:infinity
+			isOfflineRendering: false // 演奏データを作成してから演奏する
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
 		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
-			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:0, updateBufMaxTime:20, updateIntervalTime:0 };
+			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:0, updateBufMaxTime:20, updateIntervalTime:0
+		 	, latencyLimitTime:0 };
 		this.hashedDataList = [];
 		this.hashedMessageList = [];
 		this.playData = null;
@@ -200,6 +202,9 @@ var PicoAudio = (function(){
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				var decay = (128-option.pitch)/64;
 				gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
+				// gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.5, note.start+0.1);
+				// gainNode.gain.setValueAtTime(gainNode.gain.value*0.5, note.start+0.1);
+				// gainNode.gain.linearRampToValueAtTime(0.0, note.start+4+note.velocity*3);
 				break;
 			}
 			// ギター系
@@ -229,10 +234,8 @@ var PicoAudio = (function(){
 				that.stopAudioNode(oscillator, 0, gainNode);
 			}
 			default:{
-				gainNode.gain.value *= 1.1;
-				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
-				var decay = (128-option.pitch)/64;
-				gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
+				// gainNode.gain.value *= 1.1;
+				// gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 			}
 		}
 
@@ -721,7 +724,9 @@ var PicoAudio = (function(){
 		this.stop(isSongLooping);
 		var tempwebMIDIStopTime = this.states.webMIDIStopTime;
 		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
-			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:this.states.updateBufTime, updateBufMaxTime:20, updateIntervalTime:0 };
+			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:this.states.updateBufTime
+			, updateBufMaxTime:this.states.updateBufMaxTime, updateIntervalTime:this.states.updateIntervalTime
+		 	, latencyLimitTime:this.states.latencyLimitTime };
 		this.states.webMIDIStopTime = tempwebMIDIStopTime; // 値を初期化しない
 		if(this.settings.isWebMIDI && !isLight){
 			if(isSongLooping)
@@ -790,6 +795,8 @@ var PicoAudio = (function(){
 	};
 
 	PicoAudio.prototype.play = function(isSongLooping){
+		var preTime = performance.now();
+		var preTimeC = this.context.currentTime;
 		var context = this.context;
 		var settings = this.settings;
 		var trigger = this.trigger;
@@ -851,14 +858,13 @@ var PicoAudio = (function(){
 			rootTimeout: reserveSongEnd,
 			stopFunc: function(){ clearTimeout(reserveSongEnd); }
 		});
-		//setInterval(function(){console.log(that.states.stopFuncs);},5000);
+
 		var updateNowTime = performance.now();
 		var updatePreTime = updateNowTime - that.states.updateBufTime;
 		var pPreTime = performance.now(); // previous performance.now()
 		var cPreTime = context.currentTime * 1000; // previous AudioContext.currentTime
 		var pTimeSum = 0;
 		var cTimeSum = 0;
-		var latencyLimitTime = 0;
 		var cnt=0;
 		(function updateNote(updatePreTime){
 			var updateNowTime = performance.now();
@@ -874,34 +880,41 @@ var PicoAudio = (function(){
 			var latencyTime = pTimeSum - cTimeSum;
 			that.states.latencyTime = latencyTime;
 			if(latencyTime >= 30){ // currentTimeが遅い（サウンドが重い）
-				latencyLimitTime += latencyTime;
+				that.states.latencyLimitTime += latencyTime;
 				cTimeSum += 30;
-			} else if(latencyTime <= -30){ // currentTimeが遅い
+			} else if(latencyTime <= -30){ // currentTimeが速い（誤差）
 				cTimeSum = pTimeSum;
 			} else {
-				if(latencyLimitTime>0){ //
-					latencyLimitTime -= updateBufTime*0.01;
-					if(latencyLimitTime < 0) latencyLimitTime = 0;
+				if(that.states.latencyLimitTime>0){ // currentTimeが丁度いい
+					that.states.latencyLimitTime -= updateBufTime*0.01;
+					if(that.states.latencyLimitTime < 0) that.states.latencyLimitTime = 0;
 				}
 			}
 
 			// ノートを先読み度合いを自動調整（予約しすぎると重くなる）
-			var tempTime = that.states.updateIntervalTime;
 			that.states.updateIntervalTime = updateBufTime;
-			updateBufTime += tempTime/15 + (that.isFirefox() && !that.isAndroid() ? 10 : 0);
+			updateBufTime += 8 + (that.isFirefox() && !that.isAndroid() ? 10 : 0);
 			if(that.states.updateBufTime < updateBufTime){
 				that.states.updateBufTime = updateBufTime;
-			} else {
+			} else { // 先読み量を少しずつ減らす
 				that.states.updateBufTime -= that.states.updateBufTime*0.001;
+				that.states.updateBufMaxTime -= that.states.updateBufMaxTime*0.00025;
+				if(that.states.updateBufTime > 100){
+					that.states.updateBufTime -= that.states.updateBufTime*0.01;
+				}
+				if(that.states.updateBufMaxTime > 100){
+					that.states.updateBufMaxTime -= that.states.updateBufMaxTime*0.0025;
+				}
 			}
 			if(that.states.updateBufTime > that.states.updateBufMaxTime){
-				if(updateBufTime >= 900){ // バックグラウンドっぽい
+				if(updateBufTime >= 900 && that.states.latencyLimitTime <= 30){
+					// バックグラウンドっぽくて重くない場合、バックグラウンド再生
 					that.states.updateBufMaxTime += updateBufTime;
 				} else { // 通常
 					var tempTime = updateBufTime - that.states.updateBufMaxTime;
 					that.states.updateBufTime = that.states.updateBufMaxTime;
-					if(that.states.updateBufMaxTime<30){
-						that.states.updateBufMaxTime *= 1.1;
+					if(that.states.updateBufMaxTime<10){
+						that.states.updateBufMaxTime *= 1.25;
 					} else {
 						that.states.updateBufMaxTime += tempTime/3;
 					}
@@ -909,18 +922,18 @@ var PicoAudio = (function(){
 				if(that.states.updateBufMaxTime > 1200) that.states.updateBufMaxTime = 1200;
 			}
 
-			// サウンドが重かったか
-			that.states.latencyLimitTime = latencyLimitTime;
-			if(latencyLimitTime >= 200){ // サウンドが重いのが続いている
+			// サウンドが重すぎる
+			if(that.states.latencyLimitTime > 200){ // サウンドが重すぎる
 				cTimeSum = pTimeSum;
-				latencyLimitTime = 0;
-				// ノート先読みを小さくする（フリーズ対策）
+				that.states.latencyLimitTime -= 30;
+				// ノート先読みをかなり小さくする（フリーズ対策）
 				that.states.updateBufMaxTime = 1;
 				that.states.updateBufTime = 1;
 				updateBufTime = 1;
 			}
 
 			// 再生処理
+			var setTimeoutAry = [];
 			for(var ch=0; ch<16; ch++){
 				var notes = that.playData.channels[ch].notes;
 				var idx = that.states.playIndices[ch];
@@ -929,16 +942,24 @@ var PicoAudio = (function(){
 					var curTime = context.currentTime - states.startTime;
 					// 終わったノートは演奏せずにスキップ
 					if(curTime >= note.stopTime) continue;
+					if(cnt == 0 && curTime > note.startTime) continue; // （シークバーで途中から再生時）startTimeが過ぎたものは鳴らさない
+					// AudioParam.setValueAtTime()等でマイナスが入るとエラーになるので対策
+					if(curTime + note.startTime < 0) continue;
 					// 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
 					if(curTime < note.startTime - that.states.updateBufTime/1000) break;
 					if(!settings.isWebMIDI){
+						// 予約ノート数が急激に増えそうな時、先読み量を小さくしておく
+						if(that.states.stopFuncs.length>=350 && that.states.updateBufTime<1000){
+							//that.states.updateBufTime = 8 + (that.isFirefox() && !that.isAndroid() ? 10 : 0);
+							//that.states.updateBufMaxTime = that.states.updateBufTime;
+						}
 						//if(that.states.stopFuncs.length > 600) return;
 						//console.log(settings.hashLength/1000 - (context.currentTime - preTimeC));
 						// if(settings.hashLength/1000 - (context.currentTime - preTimeC) <= -0.01){
 						// 	return;
 						// }
 						// Retro Mode
-						if(that.settings.maxPolyphony!=-1||that.settings.maxPercussionPolyphony!=-1){
+						if(that.settings.maxPoly!=-1||that.settings.maxPercPoly!=-1){
 							var polyCnt=0, percCnt=0;
 							that.states.stopFuncs.forEach(function(tar){
 								if(!tar.note) return;
@@ -952,36 +973,38 @@ var PicoAudio = (function(){
 									}
 								}
 							});
-							if((note.channel!=9&&polyCnt>=that.settings.maxPolyphony)
-								||(note.channel==9&&percCnt>=that.settings.maxPercussionPolyphony)){
-								break;
+							if((note.channel!=9&&polyCnt>=that.settings.maxPoly)
+								||(note.channel==9&&percCnt>=that.settings.maxPercPoly)){
+								continue;
 							}
 						}
+
 						// Create Note
 						var stopFunc = note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note);
 						if(!stopFunc) continue; // 無音などの場合
-						that.pushFunc({
-							note: note,
-							stopFunc: stopFunc
-						});
 						// note変数が置き換わってしまうので、即時関数にして変わらないようにする
 						(function(note){
+							// TODO 時間的に4ms以内に隣接するコールバックは１回のsetTimeoutにまとめて軽量化
+							that.pushFunc({
+								note: note,
+								stopFunc: stopFunc
+							});
 							var noteOn = setTimeout(function(){
 								that.clearFunc("timeout", noteOn);
 								if(trigger.isNoteTrigger) trigger.noteOn(note);
-								var noteOff = setTimeout(function(){
-									that.clearFunc("timeout", noteOff);
-									that.clearFunc("note", note);
-									if(trigger.isNoteTrigger) trigger.noteOff(note);
-								}, note.channel!=9 ? (note.stopTime - curTime) * 1000 : that.settings.dramMaxPlayLength * 1000);
-								that.pushFunc({
-									timeout: noteOff,
-									stopFunc: function(){ clearTimeout(noteOff); }
-								});
-							}, (note.startTime - curTime) * 1000);
+							}, (note.startTime - (context.currentTime - states.startTime)) * 1000);
+							var noteOff = setTimeout(function(){
+								that.clearFunc("timeout", noteOff);
+								that.clearFunc("note", note);
+								if(trigger.isNoteTrigger) trigger.noteOff(note);
+							}, note.channel!=9 ? (note.stopTime - (context.currentTime - states.startTime)) * 1000 : that.settings.dramMaxPlayLength * 1000);
 							that.pushFunc({
 								timeout: noteOn,
 								stopFunc: function(){ clearTimeout(noteOn); }
+							});
+							that.pushFunc({
+								timeout: noteOff,
+								stopFunc: function(){ clearTimeout(noteOff); }
 							});
 						})(note);
 					}
@@ -1034,6 +1057,9 @@ var PicoAudio = (function(){
 			preTimeC = context.currentTime;
 			return updateNowTime;
 		})(updateNowTime);
+	};
+	PicoAudio.prototype.setTimeoutEx = function(func, time){
+
 	};
 
 	PicoAudio.prototype.setData = function(data){
@@ -1176,6 +1202,16 @@ var PicoAudio = (function(){
 		return u.indexOf("firefox") != -1;
 	};
 
+	PicoAudio.prototype.isArmv7l = function(){ // Raspberry Pi
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("armv7l") != -1;
+	};
+
+	PicoAudio.prototype.isDefaultReverb = function(){
+		if (this.isAndroid() || this.isArmv7l()) return false;
+		return true;
+	};
+
 	PicoAudio.prototype.getTime = function(timing){
 		var time = 0;
 		var tempo = 120;
@@ -1226,7 +1262,7 @@ var PicoAudio = (function(){
 		header.format = smf[9];
 		header.trackcount = this.getInt(smf, 10, 12);
 		header.timemanage = smf[12];
-		header.resolution = this.getInt(smf, 12, 14);
+		header.resolution = this.getInt(smf, 12, 14); // TODO 0除算防止。15bit目1のとき、https://sites.google.com/site/yyagisite/material/smfspec#ConductorTrack
 		p += 4+header.size;
 		var tempoTrack = new Array();
 		var beatTrack = new Array();
@@ -1234,7 +1270,9 @@ var PicoAudio = (function(){
 		var cc111Tick = -1;
 		var cc111Time = -1;
 		var firstNoteOnTiming = Number.MAX_SAFE_INTEGER; // 最初のノートオンのTick
+		var firstNoteOnTime = Number.MAX_SAFE_INTEGER;
 		var lastNoteOffTiming = 0; // 最後のノートオフのTick
+		var lastNoteOffTime = 0;
 		for(var i=0; i<16; i++){
 			var channel = new Object();
 			channels.push(channel);
