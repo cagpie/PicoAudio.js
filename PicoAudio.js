@@ -259,7 +259,7 @@ var PicoAudio = (function(){
 		var panNode = note.panNode;
 		var start = note.start;
 		var stop = note.stop;
-		var velocity = note.velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+		var velocity = 1;
 		var note2 = this.createBaseNote(option, false, true);
 		var oscillator = note2.oscillator;
 		var gainNode2 = note2.gainNode;
@@ -451,7 +451,7 @@ var PicoAudio = (function(){
 			option.expression ? option.expression.forEach(function(p){
 				var v = velocity * (p.value / 127);
 				if(v > 0) isGainValueZero = false;
-				expGainNode.gain.setValueAtTime( // TODO 再生位置変えると、マイナスになってエラーになる
+				expGainNode.gain.setValueAtTime(
 					v,
 					p.time + songStartTime
 				);
@@ -459,10 +459,6 @@ var PicoAudio = (function(){
 		} else {
 			if(expGainValue > 0){
 				isGainValueZero = false;
-				expGainNode.gain.setValueAtTime(
-					velocity,
-					option.startTime + songStartTime
-				);
 			}
 		}
 		if(isGainValueZero){ // 音量が常に0なら音を鳴らさない
