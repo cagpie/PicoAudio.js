@@ -1209,37 +1209,79 @@ var PicoAudio = (function(){
 	};
 
 	PicoAudio.prototype.getTime = function(timing){
-		var time = 0;
-		var tempo = 120;
-		var currentTiming = 0;
-		var that = this;
-		this.tempoTrack.some(function(tempoObj){
-			if(timing < tempoObj.timing)
-				return true;
-			time += (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
-			currentTiming = tempoObj.timing;
-			tempo = tempoObj.value;
-		});
-		time += (60 / tempo / that.settings.resolution) * (timing - currentTiming);
+		var imin = 0;
+		var imax = this.tempoTrack.length - 1;
+		var imid = -1;
+		if(this.tempoTrack && this.tempoTrack.length >= 1){
+			if(timing>=this.tempoTrack[this.tempoTrack.length-1].timing){
+				return this.tempoTrack[this.tempoTrack.length-1].time;
+			}
+			while(true){
+				imid = Math.floor(imin + (imax - imin) / 2);
+				var tempTiming = this.tempoTrack[imid].timing;
+				if(timing < tempTiming){
+					imax = imid - 1;
+				} else if(timing > tempTiming){
+					imin = imid + 1;
+				} else {
+					break;
+				}
+				if(imin > imax){
+					if(time < tempTiming) imid--;
+					break;
+				}
+			}
+		}
+		if(imid>=0){
+			var tempoObj = this.tempoTrack[imid];
+			var time = tempoObj.time;
+			var baseTiming = tempoObj.timing;
+			var tempo = tempoObj.value;
+		} else {
+			var time = 0;
+			var baseTiming = 0;
+			var tempo = 120;
+		}
+		time += (60 / tempo / this.settings.resolution) * (timing - baseTiming);
 		return time;
 	};
 
 	PicoAudio.prototype.getTiming = function(time){
-		var totalTime = 0;
-		var tempo = 120;
-		var currentTiming = 0;
-		var that = this;
-		this.tempoTrack.some(function(tempoObj){
-			totalTime += (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
-			if(totalTime > time){
-				totalTime -= (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
-				currentTiming += (time - totalTime) / (60 / tempo / that.settings.resolution);
-				return true;
+		var imin = 0;
+		var imax = this.tempoTrack.length - 1;
+		var imid = -1;
+		if(this.tempoTrack && this.tempoTrack.length >= 1){
+			if(time>=this.tempoTrack[this.tempoTrack.length-1].time){
+				return this.tempoTrack[this.tempoTrack.length-1].timing;
 			}
-			currentTiming = tempoObj.timing;
-			tempo = tempoObj.value;
-		});
-		return currentTiming;
+			while(true){
+				imid = Math.floor(imin + (imax - imin) / 2);
+				var tempTime = this.tempoTrack[imid].time;
+				if(time < tempTime){
+					imax = imid - 1;
+				} else if(time > tempTime){
+					imin = imid + 1;
+				} else {
+					break;
+				}
+				if(imin > imax){
+					if(time < tempTime) imid--;
+					break;
+				}
+			}
+		}
+		if(imid>=0){
+			var tempoObj = this.tempoTrack[imid];
+			var baseTime = tempoObj.time;
+			var timing = tempoObj.timing;
+			var tempo = tempoObj.value;
+		} else {
+			var baseTime = 0;
+			var timing = 0;
+			var tempo = 120;
+		}
+		timing += (time - baseTime) / (60 / tempo / this.settings.resolution);
+		return timing;
 	};
 
 	PicoAudio.prototype.parseSMF = function(_smf){
