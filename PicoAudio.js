@@ -722,7 +722,7 @@ var PicoAudio = (function(){
 		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
 			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:this.states.updateBufTime
 			, updateBufMaxTime:this.states.updateBufMaxTime, updateIntervalTime:this.states.updateIntervalTime
-		 	, latencyLimitTime:this.states.latencyLimitTime };
+		 	, latencyLimitTime:this.states.latencyLimitTime, noteOnAry:[], noteOffAry:[] };
 		this.states.webMIDIStopTime = tempwebMIDIStopTime; // 値を初期化しない
 		if(this.settings.isWebMIDI && !isLight){
 			if(isSongLooping)
@@ -770,9 +770,11 @@ var PicoAudio = (function(){
 			n.stopFunc();
 		});
 		states.stopFuncs = [];
-		that.states.playIndices.forEach(function(n, i, ary){
+		states.playIndices.forEach(function(n, i, ary){
 			ary[i] = 0;
 		});
+		states.noteOffAry = [];
+		states.noteOffAry = [];
 		if(this.settings.isWebMIDI){
 			if(isSongLooping)
 				return;
@@ -912,16 +914,17 @@ var PicoAudio = (function(){
 					if(that.states.updateBufMaxTime<10){
 						that.states.updateBufMaxTime *= 1.25;
 					} else {
-						that.states.updateBufMaxTime += tempTime/3;
+						that.states.updateBufMaxTime += tempTime;
 					}
 				}
 				if(that.states.updateBufMaxTime > 1200) that.states.updateBufMaxTime = 1200;
 			}
 
 			// サウンドが重すぎる
-			if(that.states.latencyLimitTime > 200){ // サウンドが重すぎる
+			if(that.states.latencyLimitTime > 200){
 				cTimeSum = pTimeSum;
 				that.states.latencyLimitTime -= 30;
+				if(that.states.latencyLimitTime > 1000) that.states.latencyLimitTime = 1000;
 				// ノート先読みをかなり小さくする（フリーズ対策）
 				that.states.updateBufMaxTime = 1;
 				that.states.updateBufTime = 1;
@@ -978,35 +981,50 @@ var PicoAudio = (function(){
 						// Create Note
 						var stopFunc = note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note);
 						if(!stopFunc) continue; // 無音などの場合
-						// note変数が置き換わってしまうので、即時関数にして変わらないようにする
-						(function(note){
-							// TODO 時間的に4ms以内に隣接するコールバックは１回のsetTimeoutにまとめて軽量化
-							that.pushFunc({
-								note: note,
-								stopFunc: stopFunc
-							});
-							var noteOn = setTimeout(function(){
-								that.clearFunc("timeout", noteOn);
-								if(trigger.isNoteTrigger) trigger.noteOn(note);
-							}, (note.startTime - (context.currentTime - states.startTime)) * 1000);
-							var noteOff = setTimeout(function(){
-								that.clearFunc("timeout", noteOff);
-								that.clearFunc("note", note);
-								if(trigger.isNoteTrigger) trigger.noteOff(note);
-							}, note.channel!=9 ? (note.stopTime - (context.currentTime - states.startTime)) * 1000 : that.settings.dramMaxPlayLength * 1000);
-							that.pushFunc({
-								timeout: noteOn,
-								stopFunc: function(){ clearTimeout(noteOn); }
-							});
-							that.pushFunc({
-								timeout: noteOff,
-								stopFunc: function(){ clearTimeout(noteOff); }
-							});
-						})(note);
+						that.pushFunc({
+							note: note,
+							stopFunc: stopFunc
+						});
+						that.states.noteOnAry.push(note);
 					}
 				}
 				that.states.playIndices[ch] = idx;
 			}
+
+			var noteOnAry = that.states.noteOnAry;
+			var noteOffAry = that.states.noteOffAry;
+			// noteOnの時間になったか監視
+			for(var i=0; i<noteOnAry.length; i++){
+				var tempNote = noteOnAry[i];
+				var nowTime = context.currentTime - states.startTime;
+				if(tempNote.startTime - nowTime <= 0){
+					// noteOnAry.splice(i, 1); の高速化
+					if(i == 0) noteOnAry.shift();
+					else if(i == noteOnAry.length-1) noteOnAry.pop();
+					else noteOnAry.splice(i, 1);
+					noteOffAry.push(tempNote);
+					// noteOn
+					if(trigger.isNoteTrigger) trigger.noteOn(tempNote);
+					i--;
+				}
+			}
+			// noteOnの時間になったか監視
+			for(var i=0; i<noteOffAry.length; i++){
+				var tempNote = noteOffAry[i];
+				var nowTime = context.currentTime - states.startTime;
+				if((tempNote.channel!=9 && tempNote.stopTime - nowTime <= 0)
+					|| (tempNote.channel==9 && tempNote.startTime + that.settings.dramMaxPlayLength - nowTime <= 0)){
+					// noteOffAry.splice(i, 1); の高速化
+					if(i == 0) noteOffAry.shift();
+					else if(i == noteOffAry.length-1) noteOffAry.pop();
+					else noteOffAry.splice(i, 1);
+					that.clearFunc("note", tempNote);
+					// noteOff
+					if(trigger.isNoteTrigger) trigger.noteOff(tempNote);
+					i--;
+				}
+			}
+
 			// if(settings.isWebMIDI && that.hashedMessageList && that.hashedMessageList[idx]){
 			// 	that.hashedMessageList[idx].forEach(function(message){
 			// 		if(settings.WebMIDIPortOutput!=null){
