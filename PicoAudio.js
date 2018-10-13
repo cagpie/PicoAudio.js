@@ -891,7 +891,7 @@ var PicoAudio = (function(){
 
 			// ノートを先読み度合いを自動調整（予約しすぎると重くなる）
 			that.states.updateIntervalTime = updateBufTime;
-			updateBufTime += 8 + (that.isFirefox() && !that.isAndroid() ? 10 : 0);
+			updateBufTime += (that.isFirefox() && !that.isAndroid() ? 12 : 8);
 			if(that.states.updateBufTime < updateBufTime){
 				that.states.updateBufTime = updateBufTime;
 			} else { // 先読み量を少しずつ減らす
@@ -1039,31 +1039,16 @@ var PicoAudio = (function(){
 			// 		}
 			// 	});
 			// }
-			if(true){ // setInterval
-				if(cnt==0){
-					var reserve = setInterval(function(){
-						updateNowTime = updateNote(updateNowTime);
-					}, 1);
-					(function(reserve){
-						that.pushFunc({
-							rootTimeout: reserve,
-							stopFunc: function(){ clearInterval(reserve); }
-						});
-					})(reserve);
-				}
-			} else { // setTimeout
-				if(cnt==0){
-					var reserve = setTimeout(function(){
-						updateNote(updateNowTime);
-						that.clearFunc("rootTimeout", reserve);
-					}, 1);
-					(function(reserve){
-						that.pushFunc({
-							rootTimeout: reserve,
-							stopFunc: function(){ clearTimeout(reserve); }
-						});
-					})(reserve);
-				}
+			if(cnt==0){
+				var reserve = setInterval(function(){
+					updateNowTime = updateNote(updateNowTime);
+				}, 1);
+				(function(reserve){
+					that.pushFunc({
+						rootTimeout: reserve,
+						stopFunc: function(){ clearInterval(reserve); }
+					});
+				})(reserve);
 			}
 			cnt++;
 			// 	trigger.songEnd(); // TODO
@@ -1088,6 +1073,8 @@ var PicoAudio = (function(){
 		this.cc111Time = data.cc111Time;
 		this.firstNoteOnTiming = data.firstNoteOnTiming;
 		this.lastNoteOffTiming = data.lastNoteOffTiming;
+		this.firstNoteOnTime = data.firstNoteOnTime;
+		this.lastNoteOffTime = data.lastNoteOffTime;
 		var that = this;
 		var hashedDataList = [];
 		// data.channels.forEach(function(channel){
@@ -1579,6 +1566,7 @@ var PicoAudio = (function(){
 								}
 								if(tick > lastNoteOffTiming){
 									lastNoteOffTiming = tick;
+									lastNoteOffTime = time;
 								}
 								return true;
 							}
@@ -1621,10 +1609,6 @@ var PicoAudio = (function(){
 							if(tick < firstNoteOnTiming){
 								firstNoteOnTiming = tick;
 								firstNoteOnTime = time;
-							}
-							if(tick > lastNoteOffTiming){
-								lastNoteOffTiming = tick;
-								lastNoteOffTime = time;
 							}
 						} else {
 							nowNoteOnIdxAry.some(function(idx,i){
