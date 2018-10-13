@@ -20,6 +20,13 @@ picoAudio.init();
 ```javascript
 var file = (FileReaderやXMLHttpRequest、Fetchなどで取得)
 var smfData = new Uint8Array(file);
-picoAudio.parseSMF(smfData);
+var parseData = picoAudio.parseSMF(smfData);
+picoAudio.setData(parseData);
 picoAudio.play();
 ```
+
+**停止**
+```javascript
+picoAudio.stop();
+```
+
