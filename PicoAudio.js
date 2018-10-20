@@ -128,7 +128,6 @@ var PicoAudio = (function(){
 
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
-		var panNode = note.panNode;
 		var noiseCutGainNode = note.noiseCutGainNode;
 		var isPizzicato = false;
 		var that = this;
@@ -200,9 +199,6 @@ var PicoAudio = (function(){
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				var decay = (128-option.pitch)/64;
 				gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
-				// gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.5, note.start+0.1);
-				// gainNode.gain.setValueAtTime(gainNode.gain.value*0.5, note.start+0.1);
-				// gainNode.gain.linearRampToValueAtTime(0.0, note.start+4+note.velocity*3);
 				break;
 			}
 			// ギター系
@@ -254,14 +250,11 @@ var PicoAudio = (function(){
 
 		var source = note.oscillator;
 		var gainNode = note.gainNode;
-		var panNode = note.panNode;
 		var start = note.start;
-		var stop = note.stop;
 		var velocity = 1;
 		var note2 = this.createBaseNote(option, false, true);
 		var oscillator = note2.oscillator;
 		var gainNode2 = note2.gainNode;
-		var panNode2 = note2.panNode;
 		var that = this;
 
 		switch(option.pitch){
@@ -1497,7 +1490,7 @@ var PicoAudio = (function(){
 			var nrpnMsb = 127;
 			var rpnLsb = 127;
 			var rpnMsb = 127;
-			var instrument = null;
+			var instrument = 0;
 			var masterVolume = 127;
 			var tempo = 120;
 			var tempoCurTick = 0;
