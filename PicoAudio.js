@@ -764,7 +764,7 @@ var PicoAudio = (function(){
 		states.playIndices.forEach(function(n, i, ary){
 			ary[i] = 0;
 		});
-		states.noteOffAry = [];
+		states.noteOnAry = [];
 		states.noteOffAry = [];
 		if(this.settings.isWebMIDI){
 			if(isSongLooping)
