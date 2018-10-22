@@ -1,19 +1,18 @@
 var PicoAudio = (function(){
 	function PicoAudio(_audioContext, _picoAudio){
+		this.debug = false;
 		this.settings = {
 			masterVolume: 1,
 			generateVolume: 0.15,
 			tempo: 120,
 			basePitch: 440,
 			resolution: 480,
-			hashLength: this.isAndroid() ? 20 : 30,
-			hashBuffer: 2,
 			isWebMIDI: false,
 			WebMIDIPortOutputs: null,
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
 			WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない？)
-			isReverb: !this.isAndroid(), // Android以外はリバーブON
+			isReverb: this.isDefaultReverb(), // リバーブONにするか
 			reverbVolume: 1.5,
 			isChorus: true,
 			chorusVolume: 0.5,
@@ -21,12 +20,19 @@ var PicoAudio = (function(){
 			dramMaxPlayLength: 0.5, // ドラムで一番長い音の秒数
 			loop: false,
 			isSkipBeginning: false, // 冒頭の余白をスキップ
-			isSkipEnding: true // 末尾の空白をスキップ
+			isSkipEnding: true, // 末尾の空白をスキップ
+			holdOnValue: 64,
+			maxPoly: -1, // 同時発音数 -1:infinity
+			maxPercPoly: -1, // 同時発音数(パーカッション) -1:infinity
+			isOfflineRendering: false // TODO 演奏データを作成してから演奏する
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
-		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
+		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
+			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:50, updateBufMaxTime:50, updateIntervalTime:0
+		 	, latencyLimitTime:0 };
 		this.hashedDataList = [];
 		this.hashedMessageList = [];
+		this.playData = null;
 		this.channels = [];
 		this.tempoTrack = [{ timing:0, value:120 },{ timing:0, value:120 }];
 		this.cc111Time = -1;
@@ -118,11 +124,10 @@ var PicoAudio = (function(){
 			}
 		}
 		var note = this.createBaseNote(option, true, false, nonStop);
-		if(note.isGainValueZero) return function(){};
+		if(note.isGainValueZero) return null;
 
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
-		var panNode = note.panNode;
 		var noiseCutGainNode = note.noiseCutGainNode;
 		var isPizzicato = false;
 		var that = this;
@@ -192,9 +197,8 @@ var PicoAudio = (function(){
 			{
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
-				gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
-				gainNode.gain.setValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
-				gainNode.gain.linearRampToValueAtTime(0.0, note.start+1.5+note.velocity*3);
+				var decay = (128-option.pitch)/64;
+				gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
 				break;
 			}
 			// ギター系
@@ -224,7 +228,8 @@ var PicoAudio = (function(){
 				that.stopAudioNode(oscillator, 0, gainNode);
 			}
 			default:{
-				//gainNode.gain.setValueAtTime(note.velocity, note.start);
+				// gainNode.gain.value *= 1.1;
+				// gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 			}
 		}
 
@@ -241,18 +246,15 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.createPercussionNote = function(option){
 		var note = this.createBaseNote(option, false);
-		if(note.isGainValueZero) return function(){};
+		if(note.isGainValueZero) return null;
 
 		var source = note.oscillator;
 		var gainNode = note.gainNode;
-		var panNode = note.panNode;
 		var start = note.start;
-		var stop = note.stop;
-		var velocity = note.velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+		var velocity = 1;
 		var note2 = this.createBaseNote(option, false, true);
 		var oscillator = note2.oscillator;
 		var gainNode2 = note2.gainNode;
-		var panNode2 = note2.panNode;
 		var that = this;
 
 		switch(option.pitch){
@@ -430,34 +432,37 @@ var PicoAudio = (function(){
 		var that = this;
 		var channel = nonChannel ? 0 : (option.channel || 0);
 		var velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] != null ? this.channels[channel][2] : 1)) * settings.generateVolume;
-		var gainNode = context.createGain();
 		var isGainValueZero = true;
 
-		var gainValue = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
-		gainNode.gain.value = gainValue;
+		if(velocity<=0) return {isGainValueZero: true};
+		var expGainValue = velocity * ((option.expression ? option.expression[0].value : 100) / 127);
+		var expGainNode = context.createGain();
+		expGainNode.gain.value = expGainValue;
 		if(isExpression){
 			option.expression ? option.expression.forEach(function(p){
 				var v = velocity * (p.value / 127);
 				if(v > 0) isGainValueZero = false;
-				gainNode.gain.setValueAtTime(
+				expGainNode.gain.setValueAtTime(
 					v,
-					that.getTime(p.timing) + songStartTime
+					p.time + songStartTime
 				);
 			}) : false;
 		} else {
-			if(gainValue > 0) isGainValueZero = false;
+			if(expGainValue > 0){
+				isGainValueZero = false;
+			}
 		}
-
 		if(isGainValueZero){ // 音量が常に0なら音を鳴らさない
-			return {isGainValueZero: isGainValueZero};
+			return {isGainValueZero: true};
 		}
 
-		var start = this.getTime(option.start) + songStartTime;
-		var stop = this.getTime(option.stop) + songStartTime;
+		var start = option.startTime + songStartTime;
+		var stop = option.stopTime + songStartTime;
 		var pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
 		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
 		var panNode = context.createStereoPanner ? context.createStereoPanner() :
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
+		var gainNode = context.createGain();
 		var noiseCutGainNode = context.createGain();
 
 		if(!context.createStereoPanner && context.createPanner) {
@@ -482,7 +487,7 @@ var PicoAudio = (function(){
 			option.pitchBend ? option.pitchBend.forEach(function(p){
 				oscillator.frequency.setValueAtTime(
 					settings.basePitch * Math.pow(Math.pow(2, 1/12), option.pitch - 69 + p.value),
-					that.getTime(p.timing) + songStartTime
+					p.time + songStartTime
 				);
 			}) : false;
 		} else {
@@ -502,7 +507,7 @@ var PicoAudio = (function(){
 					if(v > 1.0) v = 1.0;
 					panNode.pan.setValueAtTime(
 						v,
-						that.getTime(p.timing) + songStartTime
+						p.time + songStartTime
 					);
 				}) : false;
 			} else if(context.createPanner){
@@ -518,9 +523,9 @@ var PicoAudio = (function(){
 						var a = v * 90;
 						var x = Math.sin(a * (Math.PI / 180));
 						var z = -Math.cos(a * (Math.PI / 180));
-						panNode.positionX.setValueAtTime(x, that.getTime(p.timing) + songStartTime);
-						panNode.positionY.setValueAtTime(0, that.getTime(p.timing) + songStartTime);
-						panNode.positionZ.setValueAtTime(z, that.getTime(p.timing) + songStartTime);
+						panNode.positionX.setValueAtTime(x, p.time + songStartTime);
+						panNode.positionY.setValueAtTime(0, p.time + songStartTime);
+						panNode.positionZ.setValueAtTime(z, p.time + songStartTime);
 					}) : false;
 				} else {
 					// iOS
@@ -538,7 +543,7 @@ var PicoAudio = (function(){
 							var x = Math.sin(a * (Math.PI / 180));
 							var z = -Math.cos(a * (Math.PI / 180));
 							panNode.setPosition(x, 0, z);
-						}, (that.getTime(p.timing) + songStartTime - context.currentTime) * 1000);
+						}, (p.time + songStartTime - context.currentTime) * 1000);
 						that.pushFunc({
 							pan: reservePan,
 							stopFunc: function(){ clearTimeout(reservePan); }
@@ -547,10 +552,11 @@ var PicoAudio = (function(){
 				}
 			}
 			oscillator.connect(panNode);
-			panNode.connect(gainNode);
+			panNode.connect(expGainNode);
 		} else {
-			oscillator.connect(gainNode);
+			oscillator.connect(expGainNode);
 		}
+		expGainNode.connect(gainNode);
 		gainNode.connect(noiseCutGainNode);
 		noiseCutGainNode.connect(this.masterGainNode);
 		this.masterGainNode.connect(context.destination);
@@ -568,7 +574,7 @@ var PicoAudio = (function(){
 				if(m > 1.0) m = 1.0;
 				modulationGainNode.gain.setValueAtTime(
 					pitch * 10 / 440 * m,
-					that.getTime(p.timing) + songStartTime
+					p.time + songStartTime
 				);
 			}) : false;
 			var m = option.modulation ? option.modulation[0].value / 127 : 0;
@@ -592,7 +598,7 @@ var PicoAudio = (function(){
 				if(r > 1.0) r = 1.0;
 				convolverGainNode.gain.setValueAtTime(
 					r,
-					that.getTime(p.timing) + songStartTime
+					p.time + songStartTime
 				);
 			}) : false;
 			var r = option.reverb ? option.reverb[0].value / 127 : 0;
@@ -615,7 +621,7 @@ var PicoAudio = (function(){
 				if(c > 1.0) c = 1.0;
 				chorusGainNode.gain.setValueAtTime(
 					c,
-					that.getTime(p.timing) + songStartTime
+					p.time + songStartTime
 				);
 			}) : false;
 			var c = option.chorus ? option.chorus[0].value / 127 : 0;
@@ -645,7 +651,7 @@ var PicoAudio = (function(){
 			panNode: panNode,
 			gainNode: gainNode,
 			noiseCutGainNode: noiseCutGainNode,
-			isGainValueZero: isGainValueZero
+			isGainValueZero: false
 		};
 	};
 
@@ -704,7 +710,10 @@ var PicoAudio = (function(){
 		}
 		this.stop(isSongLooping);
 		var tempwebMIDIStopTime = this.states.webMIDIStopTime;
-		this.states = { isPlaying: false, playIndex:0, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0 };
+		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
+			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:this.states.updateBufTime
+			, updateBufMaxTime:this.states.updateBufMaxTime, updateIntervalTime:this.states.updateIntervalTime
+		 	, latencyLimitTime:this.states.latencyLimitTime, noteOnAry:[], noteOffAry:[] };
 		this.states.webMIDIStopTime = tempwebMIDIStopTime; // 値を初期化しない
 		if(this.settings.isWebMIDI && !isLight){
 			if(isSongLooping)
@@ -747,12 +756,16 @@ var PicoAudio = (function(){
 		var that = this;
 		if(states.isPlaying==false) return;
 		states.isPlaying = false;
-		states.playIndex -= this.settings.hashBuffer + 1;
 		states.stopTime = this.context.currentTime;
 		states.stopFuncs.forEach(function(n){
 			n.stopFunc();
 		});
 		states.stopFuncs = [];
+		states.playIndices.forEach(function(n, i, ary){
+			ary[i] = 0;
+		});
+		states.noteOnAry = [];
+		states.noteOffAry = [];
 		if(this.settings.isWebMIDI){
 			if(isSongLooping)
 				return;
@@ -762,11 +775,8 @@ var PicoAudio = (function(){
 			setTimeout(function(){
 				for(var t=0; t<16; t++){
 					that.settings.WebMIDIPortOutput.send([0xB0+t, 120, 0]);
-					for(var i=0; i<128; i++){
-						that.settings.WebMIDIPortOutput.send([0x80+t, i, 0]);
-					}
 				}
-			}, 200);
+			}, 1000);
 		}
 	};
 
@@ -775,7 +785,6 @@ var PicoAudio = (function(){
 		var settings = this.settings;
 		var trigger = this.trigger;
 		var states = this.states;
-		var hashedDataList = this.hashedDataList;
 		var that = this;
 		if(states.isPlaying==true) return;
 		if(settings.isWebMIDI && !isSongLooping){
@@ -784,8 +793,8 @@ var PicoAudio = (function(){
 				if(states.webMIDIWaitState != "waiting"){ // play()連打の対策
 					// stop()から800ms後にplay()を実行
 					states.webMIDIWaitState = "waiting";
-					var waitTime = 800 - (context.currentTime - states.webMIDIStopTime)*1000;
-					if(states.webMIDIStopTime==0) waitTime = 800; // MIDI Portをopenして最初に呼び出すときも少し待つ
+					var waitTime = 1000 - (context.currentTime - states.webMIDIStopTime)*1000;
+					if(states.webMIDIStopTime==0) waitTime = 1000; // MIDI Portをopenして最初に呼び出すときも少し待つ
 					setTimeout(function(){
 						that.states.webMIDIWaitState = "completed";
 						that.states.isPlaying = false;
@@ -803,7 +812,7 @@ var PicoAudio = (function(){
 		states.stopFuncs = [];
 		// 冒頭の余白をスキップ
 		if (this.settings.isSkipBeginning) {
-			var firstNoteOnTime = this.getTime(this.firstNoteOnTiming);
+			var firstNoteOnTime = this.firstNoteOnTime;
 			if (-states.startTime + currentTime < firstNoteOnTime) {
 				this.setStartTime(firstNoteOnTime + states.startTime - currentTime);
 			}
@@ -812,9 +821,10 @@ var PicoAudio = (function(){
 		var reserveSongEnd;
 		var reserveSongEndFunc = function(){
 			that.clearFunc("rootTimeout", reserveSongEnd);
-			var finishTime = (that.settings.isCC111 && that.cc111Time != -1) ? that.getTime(that.lastNoteOffTiming) : that.getTime(that.getTiming(Number.MAX_SAFE_INTEGER));
+			var finishTime = (that.settings.isCC111 && that.cc111Time != -1) ? that.lastNoteOffTime : that.getTime(Number.MAX_SAFE_INTEGER);
 			if (finishTime - context.currentTime + states.startTime <= 0) {
 				// 予定の時間以降に曲終了
+				trigger.songEnd();
 				that.onSongEnd();
 			} else {
 				// 処理落ちしたりしてまだ演奏中の場合、1ms後に曲終了コールバックを呼び出すよう予約
@@ -825,106 +835,251 @@ var PicoAudio = (function(){
 				});
 			}
 		};
-		var finishTime = (this.settings.isCC111 && this.cc111Time != -1) ? this.getTime(this.lastNoteOffTiming) : this.getTime(this.getTiming(Number.MAX_SAFE_INTEGER));
+		var finishTime = (this.settings.isCC111 && this.cc111Time != -1) ? this.lastNoteOffTime : this.getTime(Number.MAX_SAFE_INTEGER);
 		var reserveSongEndTime = (finishTime - context.currentTime + states.startTime) * 1000;
 		reserveSongEnd = setTimeout(reserveSongEndFunc, reserveSongEndTime);
 		that.pushFunc({
 			rootTimeout: reserveSongEnd,
 			stopFunc: function(){ clearTimeout(reserveSongEnd); }
 		});
-		(function playHash(idx){
-			states.playIndex = idx;
-			if(hashedDataList && hashedDataList[idx]){
-				hashedDataList[idx].forEach(function(note){
-					if(!settings.isWebMIDI) {
-						that.pushFunc({
-							note: note,
-							stopFunc: note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note)
-						});
-					}
-					var noteOn = setTimeout(function(){
-						that.clearFunc("timeout", noteOn);
-						if(trigger.isNoteTrigger) trigger.noteOn(note);
-						var noteOff = setTimeout(function(){
-							that.clearFunc("timeout", noteOff);
-							that.clearFunc("note", note);
-							if(trigger.isNoteTrigger) trigger.noteOff(note);
-						}, note.channel!=9 ? (that.getTime(note.stop) - that.getTime(note.start)) * 1000 : that.settings.dramMaxPlayLength * 1000);
-						that.pushFunc({
-							timeout: noteOff,
-							stopFunc: function(){ clearTimeout(noteOff); }
-						});
-					}, (that.getTime(note.start) - context.currentTime + states.startTime) * 1000);
-					that.pushFunc({
-						timeout: noteOn,
-						stopFunc: function(){ clearTimeout(noteOn); }
-					});
-				});
+
+		var updateNowTime = performance.now();
+		var pPreTime = performance.now(); // previous performance.now()
+		var cPreTime = context.currentTime * 1000; // previous AudioContext.currentTime
+		var pTimeSum = 0;
+		var cTimeSum = 0;
+		var cnt=0;
+		(function updateNote(updatePreTime){
+			var updateNowTime = performance.now();
+			var updateBufTime = updateNowTime - updatePreTime;
+
+			// サウンドが重くないか監視（フリーズ対策）
+			var pTime = updateNowTime;
+			var cTime = context.currentTime * 1000;
+			pTimeSum += pTime - pPreTime;
+			cTimeSum += cTime - cPreTime;
+			pPreTime = pTime;
+			cPreTime = cTime;
+			var latencyTime = pTimeSum - cTimeSum;
+			that.states.latencyTime = latencyTime;
+			if(latencyTime >= 30){ // currentTimeが遅い（サウンドが重い）
+				that.states.latencyLimitTime += latencyTime;
+				cTimeSum += 30;
+			} else if(latencyTime <= -30){ // currentTimeが速い（誤差）
+				cTimeSum = pTimeSum;
+			} else {
+				if(that.states.latencyLimitTime>0){ // currentTimeが丁度いい
+					that.states.latencyLimitTime -= updateBufTime*0.01;
+					if(that.states.latencyLimitTime < 0) that.states.latencyLimitTime = 0;
+				}
 			}
-			if(settings.isWebMIDI && that.hashedMessageList && that.hashedMessageList[idx]){
-				that.hashedMessageList[idx].forEach(function(message){
-					if(settings.WebMIDIPortOutput!=null){
-						if(message.message[0]!=0xff && (that.settings.WebMIDIPortSysEx || (message.message[0]!=0xf0 && message.message[0]!=0xf7))){
-							try{
-								settings.WebMIDIPortOutput.send(message.message,
-									(that.getTime(message.timing) - context.currentTime + window.performance.now()/1000 + states.startTime) * 1000);
-							}catch(e){
-								console.log(e, message.message);
+
+			// ノートを先読み度合いを自動調整（予約しすぎると重くなる）
+			that.states.updateIntervalTime = updateBufTime;
+			updateBufTime += (that.isFirefox() && !that.isAndroid() ? 12 : 8);
+			if(that.states.updateBufTime < updateBufTime){
+				that.states.updateBufTime = updateBufTime;
+			} else { // 先読み量を少しずつ減らす
+				that.states.updateBufTime -= that.states.updateBufTime*0.001;
+				that.states.updateBufMaxTime -= that.states.updateBufMaxTime*0.00025;
+				if(that.states.updateBufTime > 100){
+					that.states.updateBufTime -= that.states.updateBufTime*0.01;
+				}
+				if(that.states.updateBufMaxTime > 100){
+					that.states.updateBufMaxTime -= that.states.updateBufMaxTime*0.0025;
+				}
+			}
+			if(that.states.updateBufTime > that.states.updateBufMaxTime){
+				if(updateBufTime >= 900 && that.states.latencyLimitTime <= 30){
+					// バックグラウンドっぽくて重くない場合、バックグラウンド再生
+					that.states.updateBufMaxTime += updateBufTime;
+				} else { // 通常
+					var tempTime = updateBufTime - that.states.updateBufMaxTime;
+					if(that.states.updateBufMaxTime<10){
+						that.states.updateBufTime = that.states.updateBufMaxTime;
+						that.states.updateBufMaxTime *= 1.25;
+					} else {
+						that.states.updateBufMaxTime += tempTime;
+					}
+				}
+				if(that.states.updateBufMaxTime > 1200) that.states.updateBufMaxTime = 1200;
+			}
+
+			// サウンドが重すぎる
+			if(that.states.latencyLimitTime > 200){
+				cTimeSum = pTimeSum;
+				that.states.latencyLimitTime -= 30;
+				if(that.states.latencyLimitTime > 1000) that.states.latencyLimitTime = 1000;
+				// ノート先読みをかなり小さくする（フリーズ対策）
+				that.states.updateBufMaxTime = 1;
+				that.states.updateBufTime = 1;
+				updateBufTime = 1;
+			}
+
+			// 再生処理
+			for(var ch=0; ch<16; ch++){
+				var notes = that.playData.channels[ch].notes;
+				var idx = that.states.playIndices[ch];
+				for(; idx<notes.length; idx++){
+					var note = notes[idx];
+					var curTime = context.currentTime - states.startTime;
+					// 終わったノートは演奏せずにスキップ
+					if(curTime >= note.stopTime) continue;
+					if(cnt == 0 && curTime > note.startTime+0.05) continue; // （シークバーで途中から再生時）startTimeが過ぎたものは鳴らさない
+					// AudioParam.setValueAtTime()等でマイナスが入るとエラーになるので対策
+					if(curTime + note.startTime < 0) continue;
+					// 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
+					if(curTime < note.startTime - that.states.updateBufTime/1000) break;
+					if(!settings.isWebMIDI){
+						// Retro Mode
+						if(that.settings.maxPoly!=-1||that.settings.maxPercPoly!=-1){
+							var polyCnt=0, percCnt=0;
+							that.states.stopFuncs.forEach(function(tar){
+								if(!tar.note) return;
+								if(tar.note.channel!=9){
+									if(note.start>=tar.note.start&&note.start<tar.note.stop){
+										polyCnt++;
+									}
+								} else {
+									if(note.start==tar.note.start){
+										percCnt++;
+									}
+								}
+							});
+							if((note.channel!=9&&polyCnt>=that.settings.maxPoly)
+								||(note.channel==9&&percCnt>=that.settings.maxPercPoly)){
+								continue;
 							}
 						}
+						// Create Note
+						var stopFunc = note.channel!=9 ? that.createNote(note) : that.createPercussionNote(note);
+						if(!stopFunc) continue; // 無音などの場合
+						that.pushFunc({
+							note: note,
+							stopFunc: stopFunc
+						});
 					}
-				});
+					that.states.noteOnAry.push(note);
+				}
+				that.states.playIndices[ch] = idx;
 			}
-			if(idx < hashedDataList.length){
-				if(idx - Math.floor((context.currentTime - states.startTime) * 1000 / settings.hashLength) <= settings.hashBuffer){
-					playHash(idx + 1);
-				} else {
-					var reserve = setTimeout(function(){
-						playHash(idx + 1);
-						that.clearFunc("rootTimeout", reserve);
-					}, settings.hashLength);
+			var noteOnAry = that.states.noteOnAry;
+			var noteOffAry = that.states.noteOffAry;
+			// noteOnの時間になったか監視
+			for(var i=0; i<noteOnAry.length; i++){
+				var tempNote = noteOnAry[i];
+				var nowTime = context.currentTime - states.startTime;
+				if(tempNote.startTime - nowTime <= 0){
+					// noteOnAry.splice(i, 1); の高速化
+					if(i == 0) noteOnAry.shift();
+					else if(i == noteOnAry.length-1) noteOnAry.pop();
+					else noteOnAry.splice(i, 1);
+					noteOffAry.push(tempNote);
+					// noteOn
+					if(trigger.isNoteTrigger) trigger.noteOn(tempNote);
+					i--;
+				}
+			}
+			// noteOffの時間になったか監視
+			for(var i=0; i<noteOffAry.length; i++){
+				var tempNote = noteOffAry[i];
+				var nowTime = context.currentTime - states.startTime;
+				if((tempNote.channel!=9 && tempNote.stopTime - nowTime <= 0)
+					|| (tempNote.channel==9 && tempNote.startTime + that.settings.dramMaxPlayLength - nowTime <= 0)){
+					// noteOffAry.splice(i, 1); の高速化
+					if(i == 0) noteOffAry.shift();
+					else if(i == noteOffAry.length-1) noteOffAry.pop();
+					else noteOffAry.splice(i, 1);
+					that.clearFunc("note", tempNote);
+					// noteOff
+					if(trigger.isNoteTrigger) trigger.noteOff(tempNote);
+					i--;
+				}
+			}
+
+			if(settings.isWebMIDI && settings.WebMIDIPortOutput!=null){
+				var messages = that.playData.messages;
+				var smfData = that.playData.smfData;
+				var idx = that.states.playIndices[16];
+				for(; idx<messages.length; idx++){
+					var message = messages[idx];
+					var curTime = context.currentTime - states.startTime;
+					// 終わったノートは演奏せずにスキップ
+					if(curTime > message.time + 1) continue;
+					// 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
+					if(curTime < message.time - 1) break;
+
+					var pLen = message.smfPtrLen;
+					var p = message.smfPtr;
+					var time = message.time;
+					var state = smfData[p];
+					if(state!=0xff){
+						try{
+							if(state==0xF0 || state==0xF7){
+								if(settings.WebMIDIPortSysEx){
+									// 長さ情報を取り除いて純粋なSysExメッセージにする
+									var lengthAry = that.variableLengthToInt(smfData, p+1, p+1+4);
+									var sysExStartP = p+1+lengthAry[1];
+									var sysExEndP = sysExStartP+lengthAry[0];
+									var webMIDIMes = new Uint8Array(1 + lengthAry[0]);
+									webMIDIMes[0] = state;
+									var size = sysExEndP - sysExStartP;
+									for (var i=0; i<size; i++)
+										webMIDIMes[i+1] = smfData[sysExStartP + i];
+									settings.WebMIDIPortOutput.send(webMIDIMes,
+										(time - context.currentTime + window.performance.now()/1000 + states.startTime) * 1000);
+								}
+							} else {
+								var sendMes = [];
+								for(var i=0; i<pLen; i++) sendMes.push(smfData[p+i]);
+								settings.WebMIDIPortOutput.send(sendMes,
+									(time - context.currentTime + window.performance.now()/1000 + states.startTime) * 1000);
+							}
+						}catch(e){
+							console.log(e, p, pLen, time, state);
+						}
+					}
+				}
+				that.states.playIndices[16] = idx;
+			}
+
+			if(cnt==0){
+				var reserve = setInterval(function(){
+					updateNowTime = updateNote(updateNowTime);
+				}, 1);
+				(function(reserve){
 					that.pushFunc({
 						rootTimeout: reserve,
-						stopFunc: function(){ clearTimeout(reserve); }
+						stopFunc: function(){ clearInterval(reserve); }
 					});
-				}
-			} else {
-				trigger.songEnd();
+				})(reserve);
 			}
-		})(states.playIndex || 0);
+			cnt++;
+			preTime = performance.now();
+			preTimeC = context.currentTime;
+			return updateNowTime;
+		})(updateNowTime);
 	};
 
 	PicoAudio.prototype.setData = function(data){
+		if (this.debug) {
+			var syoriTimeS = performance.now();
+		}
 		if(this.states.isPlaying) this.stop();
+		this.playData = data;
 		this.settings.resolution = data.header.resolution;
 		this.settings.tempo = data.tempo || 120;
 		this.tempoTrack = data.tempoTrack;
 		this.cc111Time = data.cc111Time;
 		this.firstNoteOnTiming = data.firstNoteOnTiming;
 		this.lastNoteOffTiming = data.lastNoteOffTiming;
-		var that = this;
-		var hashedDataList = [];
-		data.channels.forEach(function(channel){
-			channel.notes.forEach(function(note){
-				var option = note;
-				var time = that.getTime(note.start) * (1000/that.settings.hashLength);
-				if(!hashedDataList[Math.floor(time)])
-					hashedDataList[Math.floor(time)] = [];
-				hashedDataList[Math.floor(time)].push(note);
-			});
-		});
-		if(this.settings.isWebMIDI){
-			var hashedMessageList = [];
-			data.messages.forEach(function(message){
-				var time = that.getTime(message.timing) * (1000/that.settings.hashLength);
-				if(!hashedMessageList[Math.floor(time)])
-					hashedMessageList[Math.floor(time)] = [];
-				hashedMessageList[Math.floor(time)].push(message);
-			});
-			this.hashedMessageList = hashedMessageList;
-		}
-		this.hashedDataList = hashedDataList;
+		this.firstNoteOnTime = data.firstNoteOnTime;
+		this.lastNoteOffTime = data.lastNoteOffTime;
 		this.initStatus();
+		if (this.debug) {
+			var syoriTimeE = performance.now();
+			console.log("setData time", syoriTimeE - syoriTimeS)
+		}
 		return this;
 	};
 
@@ -963,7 +1118,6 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.setStartTime = function(offset){
 		this.states.startTime -= offset;
-		this.states.playIndex = Math.floor(offset * 1000 / this.settings.hashLength);
 	};
 
 	PicoAudio.prototype.setOnSongEndListener = function(listener){
@@ -978,7 +1132,7 @@ var PicoAudio = (function(){
 		if(this.settings.loop){
 			this.initStatus(true);
 			if(this.settings.isCC111 && this.cc111Time != -1){
-				this.setStartTime(this.getTime(this.cc111Time));
+				this.setStartTime(this.cc111Time);
 			}
 			this.play(true);
 		}
@@ -1021,64 +1175,141 @@ var PicoAudio = (function(){
 		return u.indexOf("android") != -1 && u.indexOf("windows") == -1;
 	};
 
+	PicoAudio.prototype.isFirefox = function(){
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("firefox") != -1;
+	};
+
+	PicoAudio.prototype.isArmv7l = function(){ // Raspberry Pi
+		var u = navigator.userAgent.toLowerCase();
+		return u.indexOf("armv7l") != -1;
+	};
+
+	PicoAudio.prototype.isDefaultReverb = function(){
+		if (this.isAndroid() || this.isArmv7l()) return false;
+		return true;
+	};
+
 	PicoAudio.prototype.getTime = function(timing){
-		var time = 0;
-		var tempo = 120;
-		var currentTiming = 0;
-		var that = this;
-		this.tempoTrack.some(function(tempoObj){
-			if(timing < tempoObj.timing)
-				return true;
-			time += (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
-			currentTiming = tempoObj.timing;
-			tempo = tempoObj.value;
-		});
-		time += (60 / tempo / that.settings.resolution) * (timing - currentTiming);
+		var imin = 0;
+		var imax = this.tempoTrack.length - 1;
+		var imid = -1;
+		if(this.tempoTrack && this.tempoTrack.length >= 1){
+			if(timing>=this.tempoTrack[this.tempoTrack.length-1].timing){
+				return this.tempoTrack[this.tempoTrack.length-1].time;
+			}
+			while(true){
+				imid = Math.floor(imin + (imax - imin) / 2);
+				var tempTiming = this.tempoTrack[imid].timing;
+				if(timing < tempTiming){
+					imax = imid - 1;
+				} else if(timing > tempTiming){
+					imin = imid + 1;
+				} else {
+					break;
+				}
+				if(imin > imax){
+					if(timing < tempTiming) imid--;
+					break;
+				}
+			}
+		}
+		if(imid>=0){
+			var tempoObj = this.tempoTrack[imid];
+			var time = tempoObj.time;
+			var baseTiming = tempoObj.timing;
+			var tempo = tempoObj.value;
+		} else {
+			var time = 0;
+			var baseTiming = 0;
+			var tempo = 120;
+		}
+		time += (60 / tempo / this.settings.resolution) * (timing - baseTiming);
 		return time;
 	};
 
 	PicoAudio.prototype.getTiming = function(time){
-		var totalTime = 0;
-		var tempo = 120;
-		var currentTiming = 0;
-		var that = this;
-		this.tempoTrack.some(function(tempoObj){
-			totalTime += (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
-			if(totalTime > time){
-				totalTime -= (60 / tempo / that.settings.resolution) * (tempoObj.timing - currentTiming);
-				currentTiming += (time - totalTime) / (60 / tempo / that.settings.resolution);
-				return true;
+		var imin = 0;
+		var imax = this.tempoTrack.length - 1;
+		var imid = -1;
+		if(this.tempoTrack && this.tempoTrack.length >= 1){
+			if(time>=this.tempoTrack[this.tempoTrack.length-1].time){
+				return this.tempoTrack[this.tempoTrack.length-1].timing;
 			}
-			currentTiming = tempoObj.timing;
-			tempo = tempoObj.value;
-		});
-		return currentTiming;
+			while(true){
+				imid = Math.floor(imin + (imax - imin) / 2);
+				var tempTime = this.tempoTrack[imid].time;
+				if(time < tempTime){
+					imax = imid - 1;
+				} else if(time > tempTime){
+					imin = imid + 1;
+				} else {
+					break;
+				}
+				if(imin > imax){
+					if(time < tempTime) imid--;
+					break;
+				}
+			}
+		}
+		if(imid>=0){
+			var tempoObj = this.tempoTrack[imid];
+			var baseTime = tempoObj.time;
+			var timing = tempoObj.timing;
+			var tempo = tempoObj.value;
+		} else {
+			var baseTime = 0;
+			var timing = 0;
+			var tempo = 120;
+		}
+		timing += (time - baseTime) / (60 / tempo / this.settings.resolution);
+		return timing;
 	};
 
-	PicoAudio.prototype.parseSMF = function(smf){
+	PicoAudio.prototype.parseSMF = function(_smf){
+		if (this.debug) {
+			console.log(_smf);
+			var syoriTimeS = performance.now();
+		}
+		var that = this;
+		var smf = new Uint8Array(_smf); // smf配列はデータ上書きするので_smfをディープコピーする
 		if(smf[0] != 77 || smf[1] != 84 || smf[2] != 104 || smf[3] != 100)
 			return "Not Sandard MIDI File.";
 		var data = new Object;
 		var p = 4;
 		var header = new Object();
-		header.size = getInt(smf.subarray(4, 8));
+		header.size = this.getInt(smf, 4, 8);
 		header.format = smf[9];
-		header.trackcount = getInt(smf.subarray(10, 12));
+		header.trackcount = this.getInt(smf, 10, 12);
 		header.timemanage = smf[12];
-		header.resolution = getInt(smf.subarray(12, 14));
+		header.resolution = this.getInt(smf, 12, 14); // TODO 0除算防止。15bit目1のとき、https://sites.google.com/site/yyagisite/material/smfspec#ConductorTrack
 		p += 4+header.size;
-		//var tracks = new Array();
 		var tempoTrack = new Array();
 		var beatTrack = new Array();
 		var channels = new Array();
+		var cc111Tick = -1;
 		var cc111Time = -1;
 		var firstNoteOnTiming = Number.MAX_SAFE_INTEGER; // 最初のノートオンのTick
+		var firstNoteOnTime = Number.MAX_SAFE_INTEGER;
 		var lastNoteOffTiming = 0; // 最後のノートオフのTick
-		for(var i=0; i<16; i++){
+		var lastNoteOffTime = 0;
+		var chSize = this.settings.isWebMIDI ? 17 : 16;
+		for(var i=0; i<chSize; i++){
 			var channel = new Object();
 			channels.push(channel);
-			channel.messages = [];
+			// smfを読む順番を記録した索引配列を作る
+			// 型付き配列をリスト構造のように使う（リスト構造にすることで挿入処理を高速化する）
+			// [tick, smfMesLength, smfPtr, nextIndicesPtr, ...]
+			channel.indices = new Int32Array(smf.length/8);
+			channel.indicesLength = 0;
+			channel.indicesHead = -1; // 先頭のポインタ
+			channel.indicesFoot = 0; // 末尾のポインタ
+			channel.indicesCur = 0; // 現在のinsert用ポインタ
+			channel.indicesPre = 0; // 前回のinsert用ポインタ
 			channel.notes = [];
+		}
+		if (this.debug) {
+			var syoriTimeS1_1 = performance.now();
 		}
 		var songLength = 0;
 		if(this.settings.isWebMIDI) var messages = [];
@@ -1086,60 +1317,45 @@ var PicoAudio = (function(){
 			if(smf[p] != 77 || smf[p+1] != 84 || smf[p+2] != 114 || smf[p+3] != 107)
 				return "Irregular SMF.";
 			p += 4;
-			var track = new Object();
-			//tracks.push(track);
-			//track.size = getInt(smf.subarray(p, p+4));
-			//p += 4;
-			//track.notes = [];
-			var endPoint = p+4 + getInt(smf.subarray(p, p+4));
+			var endPoint = p+4 + this.getInt(smf, p, p+4);
 			p += 4;
-			var time = 0;
+			var tick = 0;
+			var tempo = 120;
+			var tempoCurTick = 0;
+			var tempoCurTime = 0;
 			var lastState = 1;
 			while(p<endPoint){
 				// DeltaTime
 				if(lastState!=null){
-					var lengthAry = variableLengthToInt(smf.subarray(p, p+5));
+					var lengthAry = this.variableLengthToInt(smf, p, p+5);
 					var dt = lengthAry[0];
-					time += dt;
+					tick += dt;
 					p += lengthAry[1];
 				}
 				// WebMIDIAPI
-				if(this.settings.isWebMIDI) var cashP = p;
+				if(this.settings.isWebMIDI){
+					var cashP = p;
+					var time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
+				}
 				// Events
-				var mesIdx;
-				var mesObj = {timing:time, mes:[]};
 				switch(Math.floor(smf[p]/0x10)){
 					case 0x8: // Note OFF - 8[ch], Pitch, Velocity
 					case 0x9: // Note ON - 9[ch], Pitch, Velocity
 					case 0xA: // Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
 					case 0xB: // Control Change - B[ch],,
 					case 0xE: // PitchBend Change - E[ch],,
-						lastState = smf[p];
 						// チャンネル毎に仕分けた後に解析する
-						mesObj.mes.push(smf[p], smf[p+1], smf[p+2]);
-						// デルタタイムの順番になるように配列に挿入
-						var channelMessages = channels[lastState&0x0F].messages;
-						for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
-							var tempMesObj = channelMessages[mesIdx];
-							if (time >= tempMesObj.timing) break;
-						}
-						mesIdx++;
-						channelMessages.splice(mesIdx, 0, mesObj);
+						lastState = smf[p];
+						var ch = channels[lastState&0x0F];
+						this.chIndicesSplice(ch, tick, p, 3); // デルタタイムの順番になるようにリスト配列に挿入
 						p+=3;
 						break;
 					case 0xC: // Program Change - C[ch],
 					case 0xD: // Channel Pre - D[ch],
-						lastState = smf[p];
 						// チャンネル毎に仕分けた後に解析する
-						mesObj.mes.push(smf[p], smf[p+1]);
-						// デルタタイムの順番になるように配列に挿入
-						var channelMessages = channels[lastState&0x0F].messages;
-						for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
-							var tempMesObj = channelMessages[mesIdx];
-							if (time >= tempMesObj.timing) break;
-						}
-						mesIdx++;
-						channelMessages.splice(mesIdx, 0, mesObj);
+						lastState = smf[p];
+						var ch = channels[lastState&0x0F];
+						this.chIndicesSplice(ch, tick, p, 2); // デルタタイムの順番になるようにリスト配列に挿入
 						p+=2;
 						break;
 					// SysEx Events or Meta Events - F[ch], ...
@@ -1149,22 +1365,15 @@ var PicoAudio = (function(){
 							case 0xF0:
 							case 0xF7:
 								// SysEx Events
-								var lengthAry = variableLengthToInt(smf.subarray(p+1, p+1+4));
+								var lengthAry = this.variableLengthToInt(smf, p+1, p+1+4);
 
 								// Master Volume
+								// 0xF0, size, 0x7f, 0x7f, 0x04, 0x01, 0xNN, volume, 0xF7
 								if(lengthAry[0]>=7 && smf[p+2]==0x7f && smf[p+3]==0x7f && smf[p+4]==0x04 && smf[p+5]==0x01){
 									// 全チャンネルにMasterVolumeメッセージを挿入する
 									for(var i=0; i<16; i++) {
-										// 0xF0, 6(length), 0x7f, 0x7f, 0x04, 0x01, 0xNN, volume
-										mesObj.mes.push(smf[p], lengthAry[0]-1, smf[p+2], smf[p+3], smf[p+4], smf[p+5], smf[p+6], smf[p+7]);
-										// デルタタイムの順番になるように配列に挿入
-										var channelMessages = channels[i].messages;
-										for(mesIdx=channelMessages.length-1; mesIdx>=0; mesIdx--){
-											var tempMesObj = channelMessages[mesIdx];
-											if(time >= tempMesObj.timing) break;
-										}
-										mesIdx++;
-										channelMessages.splice(mesIdx, 0, mesObj);
+										var ch = channels[i];
+										this.chIndicesSplice(ch, tick, p, lengthAry[0]); // デルタタイムの順番になるように配列に挿入
 									}
 								}
 
@@ -1201,14 +1410,22 @@ var PicoAudio = (function(){
 									case 0x20:
 										break;
 									case 0x2F:
-										time += (this.settings.isSkipEnding ? 0 : header.resolution) - dt;
+										tick += (this.settings.isSkipEnding ? 0 : header.resolution) - dt;
 										break;
 									// Tempo
 									case 0x51:
-										data.tempo = 60*1000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5]);
+										// 全チャンネルにTempoメッセージを挿入する
+										for(var i=0; i<16; i++) {
+											var ch = channels[i];
+											this.chIndicesSplice(ch, tick, p, 6); // デルタタイムの順番になるように配列に挿入
+										}
+										tempoCurTime += (60 / tempo / header.resolution) * (tick - tempoCurTick);
+										tempoCurTick = tick;
+										tempo = 60000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5]);
 										tempoTrack.push({
-											timing: time,
-											value: 60*1000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5])
+											timing: tick,
+											time: tempoCurTime,
+											value: tempo
 										});
 										break;
 									case 0x54:
@@ -1216,7 +1433,7 @@ var PicoAudio = (function(){
 									// Beat
 									case 0x58:
 										beatTrack.push({
-											timing: time,
+											timing: tick,
 											value: [smf[p+3], Math.pow(2, smf[p+4])]
 										});
 										break;
@@ -1224,7 +1441,7 @@ var PicoAudio = (function(){
 									case 0x7F:
 										break;
 								}
-								var lengthAry = variableLengthToInt(smf.subarray(p+2, p+2+4));
+								var lengthAry = this.variableLengthToInt(smf, p+2, p+2+4);
 								p+=2+lengthAry[1]+lengthAry[0];
 								break;
 							}
@@ -1235,114 +1452,152 @@ var PicoAudio = (function(){
 						if(lastState == null)
 							return "Irregular SMF.";
 						p--;
-						smf[p] = lastState; // TODO 上書きしないようにしたい
+						smf[p] = lastState; // 上書き
 						lastState = null;
 					}
 				}
 				// WebMIDIAPI
 				if(this.settings.isWebMIDI){
 					if(lastState!=null){
-						var state = smf[cashP];
-						if(state==0xF0 || state==0xF7){
-							if(this.settings.WebMIDIPortSysEx){
-								// 長さ情報を取り除いて純粋なSysExメッセージにする
-								var lengthAry = variableLengthToInt(smf.subarray(cashP+1, cashP+1+4));
-								var sysExStartP = cashP+1+lengthAry[1];
-								var sysExEndP = sysExStartP+lengthAry[0];
-								var webMIDIMes = new Uint8Array(1 + lengthAry[0]);
-								webMIDIMes[0] = state;
-								var size = sysExEndP - sysExStartP;
-								for (var i=0; i<size; i++)
-									webMIDIMes[i+1] = smf[sysExStartP + i];
-								messages.push({ message: webMIDIMes, timing: time });
-							}
-						} else {
-							messages.push({ message: smf.subarray(cashP, p), timing: time });
-						}
+						this.chIndicesSplice(channels[16], tick, cashP, p-cashP);
 					}
 				}
 			}
-			if(!this.settings.isSkipEnding && songLength<time) songLength = time;
+			if(!this.settings.isSkipEnding && songLength<tick) songLength = tick;
+			// リスト配列のポインタを初期化
+			for(var i=0; i<channels.length; i++){
+				channels[i].indicesCur = channels[i].indicesHead;
+				channels[i].indicesPre = channels[i].indicesHead;
+			}
 		}
 
+		if (this.debug) {
+			var syoriTimeS2 = performance.now();
+		}
 		// Midi Events (0x8n - 0xEn) parse
-		for(var ch=0; ch<channels.length; ch++){
+		for(var ch=0; ch<16; ch++){
 			var channel = channels[ch];
-			var p = 0;
-			var endPoint = channel.messages.length;
 			var dataEntry = 2;
 			var pitchBend = 0;
 			var pan = 64;
 			var expression = 127;
 			var velocity = 100;
 			var modulation = 0;
+			var hold = 0;
 			var reverb = 10;
 			var chorus = 0;
 			var nrpnLsb = 127;
 			var nrpnMsb = 127;
 			var rpnLsb = 127;
 			var rpnMsb = 127;
-			var instrument = null;
+			var instrument = 0;
 			var masterVolume = 127;
+			var tempo = 120;
+			var tempoCurTick = 0;
+			var tempoCurTime = 0;
 			var nowNoteOnIdxAry = [];
-			while(p<endPoint){
-				var mesObj = channel.messages[p];
-				// DeltaTime
-				var time = mesObj.timing;
+			var indIdx = channel.indicesHead;
+			var indices = channel.indices;
+			while(indIdx!=-1){
+				var tick = indices[indIdx];
+				var p = indices[indIdx+2];
+				var nextIdx = indices[indIdx+3];
+				var time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
 				// Events
-				var mes = channel.messages[p].mes;
-				switch(Math.floor(mes[0]/0x10)){
+				switch(Math.floor(smf[p]/0x10)){
 					// Note OFF - 8[ch], Pitch, Velocity
 					case 0x8:
-						var i=0;
-						nowNoteOnIdxAry.some(function(idx){
+						nowNoteOnIdxAry.some(function(idx,i){
 							var note = channel.notes[idx];
-							if(note.pitch==mes[1] && note.stop==null){
-								note.stop = time;
-								nowNoteOnIdxAry.splice(i, 1);
-								if(time > lastNoteOffTiming){
-									lastNoteOffTiming = time;
+							if(note.pitch==smf[p+1] && note.stop==null){
+								if(hold>=that.settings.holdOnValue){
+									if (note.holdBeforeStop==null){
+										note.holdBeforeStop = [{
+											timing: tick,
+											time: time,
+											value: hold
+										}];
+									}
+								} else {
+									note.stop = tick;
+									note.stopTime = time;
+									// nowNoteOnIdxAry.splice(i, 1); を軽量化
+									if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+									else if(i == 0) nowNoteOnIdxAry.shift();
+									else nowNoteOnIdxAry.splice(i, 1);
+								}
+								if(tick > lastNoteOffTiming){
+									lastNoteOffTiming = tick;
+									lastNoteOffTime = time;
 								}
 								return true;
 							}
-							i++;
 						});
 						break;
 					// Note ON - 9[ch], Pitch, Velocity
 					case 0x9:
-						if(mes[2]!=0){
+						if(smf[p+2]!=0){that.settings.resolution = header.resolution;
 							var note = {
-								start: time,
+								start: tick,
 								stop: null,
-								pitch: mes[1],
-								pitchBend: [{timing:time,value:pitchBend}],
-								pan: [{timing:time,value:pan}],
-								expression: [{timing:time,value:expression*(masterVolume/127)}],
-								velocity: (mes[2]/127)*(velocity/127),
-								modulation: [{timing:time,value:modulation}],
-								reverb: [{timing:time,value:reverb}],
-								chorus: [{timing:time,value:chorus}],
+								startTime: time,
+								stopTime: null,
+								pitch: smf[p+1],
+								pitchBend: [{timing:tick,time:time,value:pitchBend}],
+								pan: [{timing:tick,time:time,value:pan}],
+								expression: [{timing:tick,time:time,value:expression*(masterVolume/127)}],
+								velocity: (smf[p+2]/127)*(velocity/127),
+								modulation: [{timing:tick,time:time,value:modulation}],
+								holdBeforeStop: null,
+								reverb: [{timing:tick,time:time,value:reverb}],
+								chorus: [{timing:tick,time:time,value:chorus}],
 								instrument: instrument,
 								channel: ch
 							};
+							// If this note is NoteOn, change to NoteOFF.
+							nowNoteOnIdxAry.some(function(idx,i){
+								var note = channel.notes[idx];
+								if(note.pitch == smf[p+1] && note.stop==null){
+									note.stop = tick;
+									note.stopTime = time;
+									// nowNoteOnIdxAry.splice(i, 1); を軽量化
+									if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+									else if(i == 0) nowNoteOnIdxAry.shift();
+									else nowNoteOnIdxAry.splice(i, 1);
+								}
+							});
 							nowNoteOnIdxAry.push(channel.notes.length);
 							channel.notes.push(note);
-							if(time < firstNoteOnTiming){
-								firstNoteOnTiming = time;
+							if(tick < firstNoteOnTiming){
+								firstNoteOnTiming = tick;
+								firstNoteOnTime = time;
 							}
 						} else {
-							var i=0;
-							nowNoteOnIdxAry.some(function(idx){
+							nowNoteOnIdxAry.some(function(idx,i){
 								var note = channel.notes[idx];
-								if(note.pitch==mes[1] && note.stop==null){
-									note.stop = time;
-									nowNoteOnIdxAry.splice(i, 1);
-									if(time > lastNoteOffTiming){
-										lastNoteOffTiming = time;
+								if(note.pitch==smf[p+1] && note.stop==null){
+									if(hold>=that.settings.holdOnValue){
+										if (note.holdBeforeStop==null){
+											note.holdBeforeStop = [{
+												timing: tick,
+												time: time,
+												value: hold
+											}];
+										}
+									} else {
+										note.stop = tick;
+										note.stopTime = time;
+										// nowNoteOnIdxAry.splice(i, 1); を軽量化
+										if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+										else if(i == 0) nowNoteOnIdxAry.shift();
+										else nowNoteOnIdxAry.splice(i, 1);
+									}
+									if(tick > lastNoteOffTiming){
+										lastNoteOffTiming = tick;
+										lastNoteOffTime = time;
 									}
 									return true;
 								}
-								i++;
 							});
 						}
 						break;
@@ -1351,13 +1606,14 @@ var PicoAudio = (function(){
 						break;
 					// Control Change - B[ch],,
 					case 0xB:
-						switch(mes[1]){
+						switch(smf[p+1]){
 							case 1:
-								modulation = mes[2];
+								modulation = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.modulation.push({
-										timing: time,
+										timing: tick,
+										time: time,
 										value: modulation
 									});
 								});
@@ -1365,81 +1621,104 @@ var PicoAudio = (function(){
 							case 6:
 								if(rpnLsb==0 && rpnMsb==0){
 									// RLSB=0 & RMSB=0 -> 6はピッチ
-									dataEntry = mes[2];
+									dataEntry = smf[p+2];
 									if(dataEntry > 24){
 										dataEntry = 24;
 									}
 								}
 								if(nrpnLsb==8 && nrpnMsb==1){
 									// (保留)ビブラート・レイト(GM2/GS/XG)
-									//console.log("CC  8 1 6 "+mes[2]+" time:"+time);
+									//console.log("CC  8 1 6 "+smf[p+2]+" tick:"+tick);
 								} else if(nrpnLsb==9 && nrpnMsb==1){
 									// (保留)ビブラート・デプス(GM2/GS/XG)
-									//console.log("CC  9 1 6 "+mes[2]+" time:"+time);
+									//console.log("CC  9 1 6 "+smf[p+2]+" tick:"+tick);
 								} else if(nrpnLsb==10 && nrpnMsb==1){
 									// (保留)ビブラート・ディレイ(GM2/GS/XG)
-									//console.log("CC 10 1 6 "+mes[2]+" time:"+time);
+									//console.log("CC 10 1 6 "+smf[p+2]+" tick:"+tick);
 								}
 								break;
 							case 7:
-								velocity = mes[2];
+								velocity = smf[p+2];
 								break;
 							case 10:
 								//Pan
-								pan = mes[2];
+								pan = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.pan.push({
-										timing: time,
+										timing: tick,
+										time: time,
 										value: pan
 									});
 								});
 								break;
 							case 11:
 								//Expression
-								expression = mes[2];
+								expression = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.expression.push({
-										timing: time,
+										timing: tick,
+										time: time,
 										value: expression*(masterVolume/127)
 									});
 								});
 								break;
+							case 64:
+								//Hold1
+								hold = smf[p+2];
+								if(hold<this.settings.holdOnValue){
+									for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
+										var idx = nowNoteOnIdxAry[i];
+										var note = channel.notes[idx];
+										if(note.stop==null && note.holdBeforeStop!=null){
+											note.stop = tick;
+											note.stopTime = time;
+											// nowNoteOnIdxAry.splice(i, 1); を軽量化
+											if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+											else if(i == 0) nowNoteOnIdxAry.shift();
+											else nowNoteOnIdxAry.splice(i, 1);
+										}
+									}
+								}
+								break;
 							case 91:
-								reverb = mes[2];
+								reverb = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.reverb.push({
-										timing: time,
+										timing: tick,
+										time: time,
 										value: reverb
 									});
 								});
 								break;
 							case 93:
-								chorus = mes[2];
+								chorus = smf[p+2];
 								nowNoteOnIdxAry.forEach(function(idx){
 									var note = channel.notes[idx];
 									note.chorus.push({
-										timing: time,
+										timing: tick,
+										time: time,
 										value: chorus
 									});
 								});
 								break;
 							case 98:
-								nrpnLsb = mes[2];
+								nrpnLsb = smf[p+2];
 								break;
 							case 99:
-								nrpnMsb = mes[2];
+								nrpnMsb = smf[p+2];
 								break;
 							case 100:
-								rpnLsb = mes[2];
+								rpnLsb = smf[p+2];
 								break;
 							case 101:
-								rpnMsb = mes[2];
+								rpnMsb = smf[p+2];
 								break;
 							case 111: // RPGツクール用ループ
-								if(cc111Time == -1){
+								if(cc111Tick == -1){
+									cc111Tick = tick;
 									cc111Time = time;
 								}
 								break;
@@ -1447,83 +1726,230 @@ var PicoAudio = (function(){
 						break;
 					// Program Change - C[ch],
 					case 0xC:
-						instrument = mes[1];
+						instrument = smf[p+1];
 						break;
 					// Channel Pre - D[ch],
 					case 0xD:
 						break;
 					// PitchBend Change - E[ch],,
 					case 0xE:
-						pitchBend = ((mes[2]*128+mes[1])-8192)/8192*dataEntry;
+						pitchBend = ((smf[p+2]*128+smf[p+1])-8192)/8192*dataEntry;
 						nowNoteOnIdxAry.forEach(function(idx){
 							var note = channel.notes[idx];
 							note.pitchBend.push({
-								timing: time,
+								timing: tick,
+								time: time,
 								value: pitchBend
 							});
 						});
 						break;
 					case 0xF:
 						//lastState = smf[p]; <- ランニングナントカは無いらしい
-						switch(mes[0]){
+						switch(smf[p]){
 							case 0xF0:
 							case 0xF7:
 								// Master Volume
-								if(mes[1]>=6 && mes[2]==0x7f && mes[3]==0x7f && mes[4]==0x04 && mes[5]==0x01){
-									var vol = mes[7];
+								if(smf[p+1]==0x7f && smf[p+2]==0x7f && smf[p+3]==0x04 && smf[p+4]==0x01){
+									var vol = smf[p+6];
 									if(vol > 127) vol = 127;
 									masterVolume = vol;
 									nowNoteOnIdxAry.forEach(function(idx){
 										var note = channel.notes[idx];
 										note.expression.push({
-											timing: time,
+											timing: tick,
+											time: time,
 											value: expression*(masterVolume/127)
 										});
 									});
 								}
 								break;
+							case 0xFF:
+								// Meta Events
+								switch(smf[p+1]){
+									case 0x51:
+										// Tempo
+										tempoCurTime += (60 / tempo / header.resolution) * (tick - tempoCurTick);
+										tempoCurTick = tick;
+										tempo = 60000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5]);
+										break;
+								}
 						}
 						break;
 					default: {
 						return "Error parseSMF.";
 					}
 				}
-				p++;
+				indIdx = nextIdx;
 			}
-			delete channel.messages;
+			channel.nowNoteOnIdxAry = nowNoteOnIdxAry;
+			if (!this.debug) {
+				delete channel.indices;
+			}
+		}
+
+		// hold note off
+		for(var ch=0; ch<16; ch++){
+			var channel = channels[ch];
+			var nowNoteOnIdxAry = channels[ch].nowNoteOnIdxAry;
+			for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
+				var note = channel.notes[nowNoteOnIdxAry[i]];
+				if(note.stop==null){
+					note.stop = lastNoteOffTiming;
+					note.stopTime = lastNoteOffTime;
+					// If (note.cc[x].timing > lastNoteOffTiming), delete note.cc[x]
+					var nameAry = ["pitchBend", "pan", "expression", "modulation", "reverb", "chorus"];
+					nameAry.forEach(function(name){
+						var ccAry = note[name]
+						for(var i2=ccAry.length-1; i2>=1; i2--){
+							var obj = ccAry[i2];
+							if(obj.timing>lastNoteOffTiming){
+								// ccAry.splice(i2, 1); を軽量化
+								if(i2 == ccAry.length-1) ccAry.pop();
+								else if(i2 == 0) ccAry.shift();
+								else ccAry.splice(i2, 1);
+							}
+						}
+					});
+					// nowNoteOnIdxAry.splice(i, 1); を軽量化
+					if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
+					else if(i == 0) nowNoteOnIdxAry.shift();
+					else nowNoteOnIdxAry.splice(i, 1);
+				}
+			}
+			delete channel.nowNoteOnIdxAry;
 		}
 		if(this.settings.isSkipEnding) songLength = lastNoteOffTiming;
-		tempoTrack.push({ timing:songLength, value:120 });
+		tempoTrack.push({ timing:songLength, time:(60 / tempo / header.resolution) * (songLength - tempoCurTick) + tempoCurTime, value:120 });
+
+		if(this.settings.isWebMIDI){
+			var channel = channels[16];
+			var tempo = 120;
+			var tempoCurTick = 0;
+			var tempoCurTime = 0;
+			var indIdx = channel.indicesHead;
+			var indices = channel.indices;
+			while(indIdx!=-1){
+				var tick = indices[indIdx];
+				var pLen = indices[indIdx+1];
+				var p = indices[indIdx+2];
+				var nextIdx = indices[indIdx+3];
+				var time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
+				// Events
+				switch(smf[p]){
+					case 0xFF:
+					// Meta Events
+					switch(smf[p+1]){
+						case 0x51:
+							// Tempo
+							tempoCurTime += (60 / tempo / header.resolution) * (tick - tempoCurTick);
+							tempoCurTick = tick;
+							tempo = 60000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5]);
+							break;
+					}
+				}
+				messages.push({time:time, tick:tick, smfPtr:p, smfPtrLen:pLen});
+				indIdx = nextIdx;
+			}
+		}
 
 		data.header = header;
 		data.tempoTrack = tempoTrack;
 		data.beatTrack = beatTrack;
 		data.channels = channels;
 		data.songLength = songLength;
+		data.cc111Tick = cc111Tick;
 		data.cc111Time = cc111Time;
 		data.firstNoteOnTiming = firstNoteOnTiming;
+		data.firstNoteOnTime = firstNoteOnTime;
 		data.lastNoteOffTiming = lastNoteOffTiming;
-		if(this.settings.isWebMIDI) data.messages = messages;
-
-		function getInt(arr){
-			var value = 0;
-			for (var  i=0;i<arr.length;i++){
-				value = (value << 8) + arr[i];
-			}
-			return value;
+		data.lastNoteOffTime = lastNoteOffTime;
+		if(this.settings.isWebMIDI){
+			data.messages = messages;
+			data.smfData = new Uint8Array(smf); // lastStateを上書きしたsmfをコピー
 		}
-		function variableLengthToInt(arr) {
-			var i = 0;
-			var value = 0;
-			while(i<arr.length-1 && arr[i]>=0x80){
-				if (i < 4) value = (value<<7) + (arr[i]-0x80);
-				i++;
-			}
-			value = (value<<7) + arr[i];
-			i++;
-			return [value, i];
+
+		if (this.debug) {
+			var syoriTimeE = performance.now();
+			console.log("parseSMF time", syoriTimeE - syoriTimeS);
+			console.log("parseSMF(0/2) time", syoriTimeS1_1 - syoriTimeS);
+			console.log("parseSMF(1/2) time", syoriTimeS2 - syoriTimeS);
+			console.log("parseSMF(2/2) time", syoriTimeE - syoriTimeS2);
+			console.log(data);
 		}
 		return data;
+	};
+
+	PicoAudio.prototype.getInt = function(arr, s, e){
+		var value = 0;
+		for (var i=s; i<e; i++){
+			value = (value << 8) + arr[i];
+		}
+		return value;
+	};
+
+	PicoAudio.prototype.variableLengthToInt = function(arr, s, e){
+		var i = s;
+		var value = 0;
+		while(i<e-1 && arr[i]>=0x80){
+			if (i < s+4) value = (value<<7) + (arr[i]-0x80);
+			i++;
+		}
+		value = (value<<7) + arr[i];
+		i++;
+		return [value, i-s];
+	};
+
+	PicoAudio.prototype.chIndicesSplice = function(ch, time, p, len){
+		var indices = ch.indices;
+		// メモリー足りなくなったら拡張
+		if(indices.length <= ch.indicesLength+4){
+			if(this.debug){
+				var ts1 = performance.now();
+			}
+			var temp = new Int32Array(indices.length*2);
+			for(var i=indices.length-1; i>=0; i--){
+				temp[i] = indices[i];
+			}
+			ch.indices = indices = temp;
+			if(this.debug){
+				console.log("malloc", performance.now() - ts1, temp.length);
+			}
+		}
+		// デルタタイムの順番になるようにリスト配列に挿入
+		if(ch.indicesLength>=4 && time<indices[ch.indicesFoot]){
+			// Insert
+			while(ch.indicesCur != -1){
+				if(time<indices[ch.indicesCur]){
+					if(ch.indicesCur==ch.indicesHead){
+						ch.indicesHead = ch.indicesLength;
+					} else {
+						indices[ch.indicesPre+3] = ch.indicesLength;
+					}
+					indices[ch.indicesLength] = time;
+					indices[ch.indicesLength+1] = len;
+					indices[ch.indicesLength+2] = p;
+					indices[ch.indicesLength+3] = ch.indicesCur;
+					ch.indicesPre = ch.indicesLength;
+					ch.indicesLength += 4;
+					break;
+				}
+				ch.indicesPre = ch.indicesCur;
+				ch.indicesCur = indices[ch.indicesCur+3];
+			}
+		} else {
+			// Push
+			if(ch.indicesLength>=4){
+				indices[ch.indicesFoot+3] = ch.indicesLength;
+			} else {
+				ch.indicesHead = 0;
+			}
+			ch.indicesFoot = ch.indicesLength;
+			indices[ch.indicesLength] = time;
+			indices[ch.indicesLength+1] = len;
+			indices[ch.indicesLength+2] = p;
+			indices[ch.indicesLength+3] = -1;
+			ch.indicesLength += 4;
+		}
 	};
 
 	PicoAudio.prototype.stopAudioNode = function(tar, time, gainNode){
@@ -1545,16 +1971,19 @@ var PicoAudio = (function(){
 	};
 
 	PicoAudio.prototype.pushFunc = function(tar){
-		if(!tar.note && !tar.rootTimeout && !this.trigger.isNoteTrigger) return;
+		if(!tar.note && !tar.rootTimeout && !tar.pan && !this.trigger.isNoteTrigger) return;
 		this.states.stopFuncs.push(tar);
 	};
 
 	PicoAudio.prototype.clearFunc = function(tar1, tar2){
-		if(tar1!="note" && tar1!="rootTimeout" && !this.trigger.isNoteTrigger) return;
+		if(tar1!="note" && tar1!="rootTimeout" && tar1!="pan" && !this.trigger.isNoteTrigger) return;
 		var that = this;
-		that.states.stopFuncs.some(function(n, i){
+		that.states.stopFuncs.some(function(n, i, ary){
 			if(n[tar1] == tar2){
-				that.states.stopFuncs.splice(i, 1);
+				// ary.splice(i, 1); を軽量化
+				if(i == 0) ary.shift();
+				else if(i == ary.length-1) ary.pop();
+				else ary.splice(i, 1);
 				return true;
 			}
 		});
