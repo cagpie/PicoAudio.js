@@ -28,7 +28,7 @@ var PicoAudio = (function(){
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
 		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
-			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:50, updateBufMaxTime:50, updateIntervalTime:0
+			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:50, updateBufMaxTime:150, updateIntervalTime:0
 		 	, latencyLimitTime:0 };
 		this.hashedDataList = [];
 		this.hashedMessageList = [];
@@ -881,25 +881,28 @@ var PicoAudio = (function(){
 				that.states.updateBufTime = updateBufTime;
 			} else { // 先読み量を少しずつ減らす
 				that.states.updateBufTime -= that.states.updateBufTime*0.001;
-				that.states.updateBufMaxTime -= that.states.updateBufMaxTime*0.00025;
 				if(that.states.updateBufTime > 100){
 					that.states.updateBufTime -= that.states.updateBufTime*0.01;
 				}
-				if(that.states.updateBufMaxTime > 100){
-					that.states.updateBufMaxTime -= that.states.updateBufMaxTime*0.0025;
+				if(that.states.updateBufMaxTime > 150){
+					that.states.updateBufMaxTime -= that.states.updateBufMaxTime*0.002;
+				}
+				if(that.states.updateBufMaxTime > 10 && that.states.updateBufMaxTime < 140){
+					that.states.updateBufMaxTime += that.states.updateBufMaxTime*0.003;
 				}
 			}
 			if(that.states.updateBufTime > that.states.updateBufMaxTime){
-				if(updateBufTime >= 900 && that.states.latencyLimitTime <= 30){
+				if(updateBufTime >= 900 && that.states.latencyLimitTime <= 150){
 					// バックグラウンドっぽくて重くない場合、バックグラウンド再生
 					that.states.updateBufMaxTime += updateBufTime;
 				} else { // 通常
 					var tempTime = updateBufTime - that.states.updateBufMaxTime;
+					that.states.updateBufTime = that.states.updateBufMaxTime;
 					if(that.states.updateBufMaxTime<10){
 						that.states.updateBufTime = that.states.updateBufMaxTime;
 						that.states.updateBufMaxTime *= 1.25;
 					} else {
-						that.states.updateBufMaxTime += tempTime;
+						that.states.updateBufMaxTime += tempTime / 2;
 					}
 				}
 				if(that.states.updateBufMaxTime > 1200) that.states.updateBufMaxTime = 1200;
@@ -930,7 +933,12 @@ var PicoAudio = (function(){
 					if(curTime + note.startTime < 0) continue;
 					// 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
 					if(curTime < note.startTime - that.states.updateBufTime/1000) break;
-					if(!settings.isWebMIDI){
+					if(!settings.isWebMIDI){ 
+						// 予約ノート数が急激に増えそうな時、先読み量を小さくしておく
+						if(that.states.stopFuncs.length>=350 && that.states.updateBufTime<1000){
+							that.states.updateBufTime = (that.isFirefox() && !that.isAndroid() ? 12 : 8);
+							that.states.updateBufMaxTime = that.states.updateBufTime;
+						}
 						// Retro Mode
 						if(that.settings.maxPoly!=-1||that.settings.maxPercPoly!=-1){
 							var polyCnt=0, percCnt=0;
