@@ -905,7 +905,7 @@ var PicoAudio = (function(){
 						that.states.updateBufMaxTime += tempTime / 2;
 					}
 				}
-				if(that.states.updateBufMaxTime > 1200) that.states.updateBufMaxTime = 1200;
+				if(that.states.updateBufMaxTime > 1100) that.states.updateBufMaxTime = 1100;
 			}
 
 			// サウンドが重すぎる
