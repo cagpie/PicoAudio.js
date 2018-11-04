@@ -602,7 +602,8 @@ var PicoAudio = (function(){
 			var r = option.reverb ? option.reverb[0].value / 127 : 0;
 			if(r > 1.0) r = 1.0;
 			convolverGainNode.gain.value = r;
-			gainNode.connect(convolverGainNode);
+			gainNode.connect(stopGainNode);
+			stopGainNode.connect(convolverGainNode);
 			convolverGainNode.connect(convolver);
 		}
 
@@ -625,7 +626,8 @@ var PicoAudio = (function(){
 			var c = option.chorus ? option.chorus[0].value / 127 : 0;
 			if(c > 1.0) c = 1.0;
 			chorusGainNode.gain.value = c;
-			gainNode.connect(chorusGainNode);
+			gainNode.connect(stopGainNode);
+			stopGainNode.connect(chorusGainNode);
 			chorusGainNode.connect(chorusDelayNode);
 		}
 
@@ -1960,7 +1962,6 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.stopAudioNode = function(tar, time, stopGainNode, isNoiseCut){
 		var isImmed = time <= this.context.currentTime; // 即時ストップか？
-		isNoiseCut = false;
 		// 時間設定
 		if(!isImmed){ // 予約ストップ
 			var vol1Time = time-0.005;
@@ -1979,12 +1980,12 @@ var PicoAudio = (function(){
 				tar.stop(stopTime);
 			} else {
 				tar.stop(stopTime);
-				stopGainNode.gain.cancelScheduledValues(this.context.currentTime);
+				stopGainNode.gain.cancelScheduledValues(0);
 				stopGainNode.gain.setValueAtTime(1, vol1Time);
 				stopGainNode.gain.linearRampToValueAtTime(0, stopTime);
 			}
 		} catch(e) { // iOS (stopが２回以上使えないので、代わりにstopGainNodeでミュートにする)
-			stopGainNode.gain.cancelScheduledValues(this.context.currentTime);
+			stopGainNode.gain.cancelScheduledValues(0);
 			if(!isNoiseCut){
 				stopGainNode.gain.setValueAtTime(0, stopTime);
 			} else {
