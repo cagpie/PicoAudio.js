@@ -111,25 +111,14 @@ var PicoAudio = (function(){
 	}
 
 	PicoAudio.prototype.createNote = function(option){
-		var nonStop = false;
-		if(option.channel){
-			switch(this.channels[option.channel][1]/10 || option.instrument){
-				// ピッチカート系減衰は後でstopさせる
-				case 0.2:
-				case 12: case 13: case 45: case 55:
-				// 再生しない系は後でstopさせる
-				case 119:
-					nonStop = true;
-					break;
-			}
-		}
-		var note = this.createBaseNote(option, true, false, nonStop);
+		var note = this.createBaseNote(option, true, false, true); // oscillatorのstopはこちらで実行するよう指定
 		if(note.isGainValueZero) return null;
 
 		var oscillator = note.oscillator;
 		var gainNode = note.gainNode;
-		var noiseCutGainNode = note.noiseCutGainNode;
+		var stopGainNode = note.stopGainNode;
 		var isPizzicato = false;
+		var isNoiseCut = false;
 		var that = this;
 
 		// 音色別の音色振り分け 書き方(ry
@@ -177,6 +166,13 @@ var PicoAudio = (function(){
 				oscillator.type = "square";
 			}
 		}
+
+		// 音の終わりのプチプチノイズが気になるので、音の終わりに5ms減衰してノイズ軽減
+		if((oscillator.type == "sine" || oscillator.type == "triangle")
+			&& !isPizzicato && note.stop - note.start > 0.01){
+			isNoiseCut = true;
+		}
+
 		// 音色別の減衰　書き方ミスったなあ
 		switch(this.channels[note.channel][1]/10 || option.instrument){
 			// ピッチカート系減衰
@@ -187,7 +183,7 @@ var PicoAudio = (function(){
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+0.2);
-				that.stopAudioNode(oscillator, note.start+0.2, gainNode);
+				that.stopAudioNode(oscillator, note.start+0.2, stopGainNode);
 				break;
 			}
 			// ピアノ程度に伸ばす系
@@ -199,6 +195,7 @@ var PicoAudio = (function(){
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				var decay = (128-option.pitch)/64;
 				gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
+				that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
 				break;
 			}
 			// ギター系
@@ -208,6 +205,7 @@ var PicoAudio = (function(){
 				gainNode.gain.value *= 1.1;
 				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+1.0+note.velocity*4);
+				that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
 				break;
 			}
 			// 減衰していくけど終わらない系
@@ -219,29 +217,27 @@ var PicoAudio = (function(){
 				gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
 				gainNode.gain.setValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
 				gainNode.gain.linearRampToValueAtTime(0.0, note.start+2.0+note.velocity*10);
+				that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
 				break;
 			}
 			// 再生しない系
 			case 119:
 			{
 				gainNode.gain.value = 0;
-				that.stopAudioNode(oscillator, 0, gainNode);
+				that.stopAudioNode(oscillator, 0, stopGainNode);
 			}
 			default:{
-				// gainNode.gain.value *= 1.1;
-				// gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
+				gainNode.gain.value *= 1.1;
+				gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
+				that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
 			}
 		}
 
-		if((oscillator.type == "sine" || oscillator.type == "triangle")
-			&& !isPizzicato && note.stop - note.start > 0.01){
-			// 終わり際に少し減衰しノイズ削減
-			noiseCutGainNode.gain.setValueAtTime(1, note.stop-0.005);
-			noiseCutGainNode.gain.linearRampToValueAtTime(0, note.stop);
-		}
-		return function(){
-			that.stopAudioNode(oscillator, 0, gainNode);
-		};
+		(function(oscillator, stopGainNode){
+			return function(){
+				that.stopAudioNode(oscillator, 0, stopGainNode, true);
+			};
+		})(oscillator, stopGainNode);
 	};
 
 	PicoAudio.prototype.createPercussionNote = function(option){
@@ -250,11 +246,13 @@ var PicoAudio = (function(){
 
 		var source = note.oscillator;
 		var gainNode = note.gainNode;
+		var stopGainNode = note.stopGainNode;
 		var start = note.start;
 		var velocity = 1;
 		var note2 = this.createBaseNote(option, false, true);
 		var oscillator = note2.oscillator;
 		var gainNode2 = note2.gainNode;
+		var stopGainNode2 = note2.stopGainNode;
 		var that = this;
 
 		switch(option.pitch){
@@ -420,8 +418,8 @@ var PicoAudio = (function(){
 				that.stopAudioNode(oscillator, 0, gainNode2);
 		}
 		return function(){
-			that.stopAudioNode(source, 0, gainNode);
-			that.stopAudioNode(oscillator, 0, gainNode2);
+			that.stopAudioNode(source, 0, stopGainNode, true);
+			that.stopAudioNode(oscillator, 0, stopGainNode2, true);
 		};
 	};
 
@@ -463,7 +461,7 @@ var PicoAudio = (function(){
 		var panNode = context.createStereoPanner ? context.createStereoPanner() :
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var gainNode = context.createGain();
-		var noiseCutGainNode = context.createGain();
+		var stopGainNode = context.createGain();
 
 		if(!context.createStereoPanner && context.createPanner) {
 			// iOS, Old Browser
@@ -557,8 +555,8 @@ var PicoAudio = (function(){
 			oscillator.connect(expGainNode);
 		}
 		expGainNode.connect(gainNode);
-		gainNode.connect(noiseCutGainNode);
-		noiseCutGainNode.connect(this.masterGainNode);
+		gainNode.connect(stopGainNode);
+		stopGainNode.connect(this.masterGainNode);
 		this.masterGainNode.connect(context.destination);
 
 		if(channel!=9 && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
@@ -638,7 +636,7 @@ var PicoAudio = (function(){
 
 		oscillator.start(start);
 		if(channel!=9 && !nonChannel && !nonStop){
-			this.stopAudioNode(oscillator, stop, gainNode);
+			this.stopAudioNode(oscillator, stop, stopGainNode);
 		}
 
 		return {
@@ -650,7 +648,7 @@ var PicoAudio = (function(){
 			oscillator: oscillator,
 			panNode: panNode,
 			gainNode: gainNode,
-			noiseCutGainNode: noiseCutGainNode,
+			stopGainNode: stopGainNode,
 			isGainValueZero: false
 		};
 	};
@@ -1960,20 +1958,38 @@ var PicoAudio = (function(){
 		}
 	};
 
-	PicoAudio.prototype.stopAudioNode = function(tar, time, gainNode){
-		try{
-			if(time > 0) {
-				tar.stop(time);
+	PicoAudio.prototype.stopAudioNode = function(tar, time, stopGainNode, isNoiseCut){
+		var isImmed = time <= this.context.currentTime; // 即時ストップか？
+		isNoiseCut = false;
+		// 時間設定
+		if(!isImmed){ // 予約ストップ
+			var vol1Time = time-0.005;
+			var stopTime = time;
+		} else { // 即時ストップ
+			if(!isNoiseCut){
+				var stopTime = this.context.currentTime;
 			} else {
-				tar.stop(this.context.currentTime+0.005);
-				gainNode.gain.cancelScheduledValues(this.context.currentTime);
-				gainNode.gain.linearRampToValueAtTime(0, this.context.currentTime+0.005);
+				var vol1Time = this.context.currentTime;
+				var stopTime = this.context.currentTime+0.005;
 			}
-		} catch(e) {
-			// iOS
-			gainNode.gain.cancelScheduledValues(time);
-			if(time <= 0) {
-				gainNode.gain.linearRampToValueAtTime(0, this.context.currentTime+0.005);
+		}
+		// 音の停止
+		try{
+			if(!isNoiseCut){
+				tar.stop(stopTime);
+			} else {
+				tar.stop(stopTime);
+				stopGainNode.gain.cancelScheduledValues(this.context.currentTime);
+				stopGainNode.gain.setValueAtTime(1, vol1Time);
+				stopGainNode.gain.linearRampToValueAtTime(0, stopTime);
+			}
+		} catch(e) { // iOS (stopが２回以上使えないので、代わりにstopGainNodeでミュートにする)
+			stopGainNode.gain.cancelScheduledValues(this.context.currentTime);
+			if(!isNoiseCut){
+				stopGainNode.gain.setValueAtTime(0, stopTime);
+			} else {
+				stopGainNode.gain.setValueAtTime(1, vol1Time);
+				stopGainNode.gain.linearRampToValueAtTime(0, stopTime);
 			}
 		}
 	};
