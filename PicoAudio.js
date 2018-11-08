@@ -12,7 +12,7 @@ var PicoAudio = (function(){
 			WebMIDIPortOutput: null,
 			WebMIDIPort: -1, // -1:auto
 			WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない？)
-			isReverb: this.isDefaultReverb(), // リバーブONにするか
+			isReverb: true, // リバーブONにするか
 			reverbVolume: 1.5,
 			isChorus: true,
 			chorusVolume: 0.5,
@@ -1193,8 +1193,15 @@ var PicoAudio = (function(){
 		return u.indexOf("armv7l") != -1;
 	};
 
-	PicoAudio.prototype.isDefaultReverb = function(){
-		if (this.isAndroid() || this.isArmv7l()) return false;
+	PicoAudio.prototype.measurePerformanceReverb = function(){
+		// 0.5秒パフォーマンス計測して、リバーブONにするか判断する
+		var max = 150000; // 0.5秒以内にここまで計算できればリバーブON
+		var startTime = performance.now();
+		for (var i=0;i<max;i++) {
+			if (performance.now()-startTime>=500) break;
+		}
+		console.log("measurePerformanceReverb", i);
+		if (i < max) return false;
 		return true;
 	};
 
