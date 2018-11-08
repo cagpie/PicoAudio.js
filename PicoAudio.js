@@ -1,6 +1,6 @@
 var PicoAudio = (function(){
 	function PicoAudio(_audioContext, _picoAudio){
-		this.debug = false;
+		this.debug = true;
 		this.settings = {
 			masterVolume: 1,
 			generateVolume: 0.15,
@@ -43,6 +43,21 @@ var PicoAudio = (function(){
 		// AudioContextがある場合はそのまま初期化、なければAudioContextを用いる初期化をinit()で
 		if(_audioContext){
 			this.init(_audioContext, _picoAudio);
+		}
+
+		// Fallback
+		// Unsupport performance.now()
+		if (typeof performance==="undefined") {
+			performance = {};
+		}
+		if (!performance.now) {
+			performance.now = function now() {
+				return Date.now();
+			};
+		}
+		// Unsupport Number.MAX_SAFE_INTEGER
+		if (!Number.MAX_SAFE_INTEGER) {
+			Number.MAX_SAFE_INTEGER = 9007199254740991;
 		}
 	}
 
@@ -1453,7 +1468,7 @@ var PicoAudio = (function(){
 			// smfを読む順番を記録した索引配列を作る
 			// 型付き配列をリスト構造のように使う（リスト構造にすることで挿入処理を高速化する）
 			// [tick, smfMesLength, smfPtr, nextIndicesPtr, ...]
-			channel.indices = new Int32Array(smf.length/8);
+			channel.indices = new Int32Array(Math.floor(smf.length/8));
 			channel.indicesLength = 0;
 			channel.indicesHead = -1; // 先頭のポインタ
 			channel.indicesFoot = 0; // 末尾のポインタ
@@ -2059,7 +2074,7 @@ var PicoAudio = (function(){
 			if(this.debug){
 				var ts1 = performance.now();
 			}
-			var temp = new Int32Array(indices.length*2);
+			var temp = new Int32Array(Math.floor(indices.length*2));
 			for(var i=indices.length-1; i>=0; i--){
 				temp[i] = indices[i];
 			}
