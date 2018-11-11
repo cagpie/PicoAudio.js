@@ -1015,14 +1015,14 @@ var PicoAudio = (function(){
 			cPreTime = cTime;
 			var latencyTime = pTimeSum - cTimeSum;
 			that.states.latencyTime = latencyTime;
-			if(latencyTime >= 30){ // currentTimeが遅い（サウンドが重い）
+			if(latencyTime >= 100){ // currentTimeが遅い（サウンドが重い）
 				that.states.latencyLimitTime += latencyTime;
-				cTimeSum += 30;
-			} else if(latencyTime <= -30){ // currentTimeが速い（誤差）
+				cTimeSum += 100;
+			} else if(latencyTime <= -100){ // currentTimeが速い（誤差）
 				cTimeSum = pTimeSum;
 			} else {
 				if(that.states.latencyLimitTime>0){ // currentTimeが丁度いい
-					that.states.latencyLimitTime -= updateBufTime*0.01;
+					that.states.latencyLimitTime -= updateBufTime*0.04;
 					if(that.states.latencyLimitTime < 0) that.states.latencyLimitTime = 0;
 				}
 			}
