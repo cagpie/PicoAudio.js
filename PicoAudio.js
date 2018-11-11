@@ -1,6 +1,7 @@
 var PicoAudio = (function(){
 	function PicoAudio(_audioContext, _picoAudio){
-		this.debug = true;
+		this.debug = false;
+		this.isTonyu2 = false;
 		this.settings = {
 			masterVolume: 1,
 			generateVolume: 0.15,
@@ -19,7 +20,7 @@ var PicoAudio = (function(){
 			isCC111: true,
 			dramMaxPlayLength: 2, // ドラムで一番長い音の秒数
 			loop: false,
-			isSkipBeginning: false, // 冒頭の余白をスキップ
+			isSkipBeginning: this.isTonyu2, // 冒頭の余白をスキップ(Tonyu2はtrue)
 			isSkipEnding: true, // 末尾の空白をスキップ
 			holdOnValue: 64,
 			maxPoly: -1, // 同時発音数 -1:infinity
@@ -123,6 +124,13 @@ var PicoAudio = (function(){
 		this.chorusGainNode.connect(this.masterGainNode);
 		this.masterGainNode.connect(this.context.destination);
 		this.chorusOscillator.start(0);
+		
+		// リバーブON設定を引き継ぐ。未設定ならパフォーマンス計測する(Tonyu2用)
+		if(_picoAudio){
+			this.settings.isReverb = _picoAudio.settings.isReverb;
+		} else {
+			this.settings.isReverb = this.measurePerformanceReverb();
+		}
 	}
 
 	PicoAudio.prototype.createNote = function(option){
@@ -1353,7 +1361,9 @@ var PicoAudio = (function(){
 		for (var i=0;i<max;i++) {
 			if (performance.now()-startTime>=500) break;
 		}
-		console.log("measurePerformanceReverb", i);
+		if (this.debug) {
+			console.log("measurePerformanceReverb", i, performance.now()-startTime);
+		}
 		if (i < max) return false;
 		return true;
 	};
@@ -1652,7 +1662,7 @@ var PicoAudio = (function(){
 			var velocity = 100;
 			var modulation = 0;
 			var hold = 0;
-			var reverb = 10;
+			var reverb = this.isTonyu2 ? 0 : 10;
 			var chorus = 0;
 			var nrpnLsb = 127;
 			var nrpnMsb = 127;
