@@ -1,6 +1,8 @@
 var PicoAudio = (function(){
 	function PicoAudio(_audioContext, _picoAudio){
 		this.debug = false;
+		this.isStarted = false;
+		this.isPlayed = false;
 		this.isTonyu2 = false;
 		this.settings = {
 			masterVolume: 1,
@@ -63,6 +65,7 @@ var PicoAudio = (function(){
 	}
 
 	PicoAudio.prototype.init = function(_audioContext, _picoAudio){
+		this.isStarted = true;
 		var AudioContext = window.AudioContext || window.webkitAudioContext;
 		this.context = _audioContext ? _audioContext : new AudioContext();
 		if(_picoAudio && _picoAudio.whitenoise){ // 使いまわし
@@ -968,6 +971,7 @@ var PicoAudio = (function(){
 			}
 		}
 		var currentTime = this.context.currentTime;
+		this.isPlayed = true;
 		states.isPlaying = true;
 		states.startTime = !states.startTime && !states.stopTime ? currentTime : (states.startTime + currentTime - states.stopTime);
 		states.stopFuncs = [];
