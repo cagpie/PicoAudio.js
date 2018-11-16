@@ -21,14 +21,14 @@ var PicoAudio = (function(){
 			isChorus: true,
 			chorusVolume: 0.5,
 			isCC111: true,
-			dramMaxPlayLength: 2, // ドラムで一番長い音の秒数
 			loop: false,
 			isSkipBeginning: this.isTonyu2, // 冒頭の余白をスキップ(Tonyu2はtrue)
 			isSkipEnding: true, // 末尾の空白をスキップ
 			holdOnValue: 64,
 			maxPoly: -1, // 同時発音数 -1:infinity
 			maxPercPoly: -1, // 同時発音数(パーカッション) -1:infinity
-			isOfflineRendering: false // TODO 演奏データを作成してから演奏する
+			isOfflineRendering: false, // TODO 演奏データを作成してから演奏する
+			isSameDrumSoundOverlap: false // 同じドラムの音が重なることを許容するか
 		};
 		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
 		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
@@ -288,6 +288,7 @@ var PicoAudio = (function(){
 		var oscillator = note2.oscillator;
 		var gainNode2 = note2.gainNode;
 		var stopGainNode2 = note2.stopGainNode;
+		var nextSameNoteOnInterval = option.nextSameNoteOnInterval;
 		var that = this;
 
 		// oscillator.frequency.setValueAtTime()がcurrentTimeより遅れると周波数設定がされないので対策
@@ -717,8 +718,18 @@ var PicoAudio = (function(){
 				stopAudioTime2 = 0;
 				break;
 		}
+		// 同じドラムの音が重ならないようにする機能
+		// 同じドラムが次すぐ鳴る場合、次が鳴る前に止めて音が重ならないようにする（同時発音数の増加を軽減する）
+		if (!this.settings.isSameDrumSoundOverlap && nextSameNoteOnInterval != -1) {
+			if (stopAudioTime > nextSameNoteOnInterval) {stopAudioTime = nextSameNoteOnInterval;}
+			if (stopAudioTime2 > nextSameNoteOnInterval) {stopAudioTime2 = nextSameNoteOnInterval;}
+		}
+		// ドラム音停止
 		that.stopAudioNode(source, start+stopAudioTime, stopGainNode);
 		that.stopAudioNode(oscillator, start+stopAudioTime2, stopGainNode2);
+		// ドラム停止時間を設定
+		option.drumStopTime = option.startTime + (stopAudioTime >= stopAudioTime2 ? stopAudioTime : stopAudioTime2);
+		// 途中で曲停止する場合の処理を返す
 		return function(){
 			that.stopAudioNode(source, 0, stopGainNode, true);
 			that.stopAudioNode(oscillator, 0, stopGainNode2, true);
@@ -1296,7 +1307,7 @@ var PicoAudio = (function(){
 				var tempNote = noteOffAry[i];
 				var nowTime = context.currentTime - states.startTime;
 				if((tempNote.channel!=9 && tempNote.stopTime - nowTime <= 0)
-					|| (tempNote.channel==9 && tempNote.startTime + that.settings.dramMaxPlayLength - nowTime <= 0)){
+					|| (tempNote.channel==9 && tempNote.drumStopTime - nowTime <= 0)){
 					// noteOffAry.splice(i, 1); の高速化
 					if(i == 0) noteOffAry.shift();
 					else if(i == noteOffAry.length-1) noteOffAry.pop();
@@ -1816,6 +1827,7 @@ var PicoAudio = (function(){
 			var nowNoteOnIdxAry = [];
 			var indIdx = channel.indicesHead;
 			var indices = channel.indices;
+			var nextNoteOnAry = new Array(128);
 			while(indIdx!=-1){
 				var tick = indices[indIdx];
 				var p = indices[indIdx+2];
@@ -1870,8 +1882,16 @@ var PicoAudio = (function(){
 								reverb: [{timing:tick,time:time,value:reverb}],
 								chorus: [{timing:tick,time:time,value:chorus}],
 								instrument: instrument,
-								channel: ch
+								channel: ch,
+								nextSameNoteOnInterval: -1,
+								drumStopTime: 2 // 再生時に使う
 							};
+							// 前回鳴っていたの同音ノートに次のノートオン時間を入れる
+							var prevNote = nextNoteOnAry[smf[p+1]];
+							if(prevNote){
+								prevNote.nextSameNoteOnInterval = time - prevNote.startTime;
+							}
+							nextNoteOnAry[smf[p+1]] = note;
 							// If this note is NoteOn, change to NoteOFF.
 							nowNoteOnIdxAry.some(function(idx,i){
 								var note = channel.notes[idx];
