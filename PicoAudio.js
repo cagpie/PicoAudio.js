@@ -148,7 +148,7 @@ var PicoAudio = (function(){
 	}
 
 	PicoAudio.prototype.createNote = function(option){
-		var note = this.createBaseNote(option, true, false, true); // oscillatorのstopはこちらで実行するよう指定
+		var note = this.createBaseNote(option, false, true, false, true); // oscillatorのstopはこちらで実行するよう指定
 		if(note.isGainValueZero) return null;
 
 		var oscillator = note.oscillator;
@@ -257,11 +257,15 @@ var PicoAudio = (function(){
 				that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
 				break;
 			}
-			// 再生しない系
-			case 119:
+			case 119: // Reverse Cymbal
 			{
-				gainNode.gain.value = 0;
-				that.stopAudioNode(oscillator, 0, stopGainNode);
+				gainNode.gain.value *= 0;
+				that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
+				var note2 = this.createBaseNote(option, true, false);
+				note2.oscillator.playbackRate.setValueAtTime((option.pitch+1)/128, note.start);
+				note2.gainNode.gain.setValueAtTime(0, note.start);
+				note2.gainNode.gain.linearRampToValueAtTime(1.3, note.start+2);
+				that.stopAudioNode(note2.oscillator, note.stop, note2.stopGainNode);
 			}
 			default:{
 				gainNode.gain.value *= 1.1;
@@ -272,11 +276,12 @@ var PicoAudio = (function(){
 
 		return function(){
 			that.stopAudioNode(oscillator, 0, stopGainNode, true);
+			if (note2 && note2.oscillator) that.stopAudioNode(note2.oscillator, 0, note2.stopGainNode, true);
 		};
 	};
 
 	PicoAudio.prototype.createPercussionNote = function(option){
-		var note = this.createBaseNote(option, false);
+		var note = this.createBaseNote(option, true, false);
 		if(note.isGainValueZero) return null;
 
 		var source = note.oscillator;
@@ -284,7 +289,7 @@ var PicoAudio = (function(){
 		var stopGainNode = note.stopGainNode;
 		var start = note.start;
 		var velocity = 1; // ドラム全体の音量調整用
-		var note2 = this.createBaseNote(option, false, true);
+		var note2 = this.createBaseNote(option, false, false, true);
 		var oscillator = note2.oscillator;
 		var gainNode2 = note2.gainNode;
 		var stopGainNode2 = note2.stopGainNode;
@@ -716,6 +721,8 @@ var PicoAudio = (function(){
 			case 85: // Castanets
 			case 86: // Mute Surdo
 			case 87: // Open Surdo
+				stopAudioTime = 0;
+				stopAudioTime2 = 0;
 				break;
 			default:
 				stopAudioTime = 0;
@@ -740,7 +747,7 @@ var PicoAudio = (function(){
 		};
 	};
 
-	PicoAudio.prototype.createBaseNote = function(option, isExpression, nonChannel, nonStop){
+	PicoAudio.prototype.createBaseNote = function(option, isDrum, isExpression, nonChannel, nonStop){
 		var settings = this.settings;
 		var context = this.context;
 		var songStartTime = this.states.startTime;
@@ -774,7 +781,7 @@ var PicoAudio = (function(){
 		var start = option.startTime + songStartTime;
 		var stop = option.stopTime + songStartTime;
 		var pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
-		var oscillator = channel!=9 ? context.createOscillator() : context.createBufferSource();
+		var oscillator = !isDrum ? context.createOscillator() : context.createBufferSource();
 		var panNode = context.createStereoPanner ? context.createStereoPanner() :
 				context.createPanner ? context.createPanner() : { pan: { setValueAtTime: function(){} } };
 		var gainNode = context.createGain();
@@ -795,7 +802,7 @@ var PicoAudio = (function(){
 			panNode.pan.value = panValue;
 		}
 
-		if(channel!=9){
+		if(!isDrum){
 			oscillator.type = option.type || "sine";
 			oscillator.detune.value = 0;
 			oscillator.frequency.value = pitch;
@@ -876,7 +883,7 @@ var PicoAudio = (function(){
 		stopGainNode.connect(this.masterGainNode);
 		this.masterGainNode.connect(context.destination);
 
-		if(channel!=9 && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
+		if(!isDrum && option.modulation && (option.modulation.length >= 2 || option.modulation[0].value > 0)){
 			var modulationOscillator = context.createOscillator();
 			var modulationGainNode = context.createGain();
 			firstPan = true;
@@ -954,7 +961,7 @@ var PicoAudio = (function(){
 		}
 
 		oscillator.start(start);
-		if(channel!=9 && !nonChannel && !nonStop){
+		if(!isDrum && !nonChannel && !nonStop){
 			this.stopAudioNode(oscillator, stop, stopGainNode);
 		}
 
