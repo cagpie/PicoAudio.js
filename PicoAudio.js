@@ -1,3 +1,4 @@
+'use strict';
 var PicoAudio = (function(){
 	function PicoAudio(_audioContext, _picoAudio){
 		this.debug = false;
@@ -698,7 +699,7 @@ var PicoAudio = (function(){
 							return;
 						}
 						var reservePan = setTimeout(function(){
-							that.clearFunc("pan", reservePan)
+							that.clearFunc("pan", reservePan);
 							var v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
 							if(v > 1.0) v = 1.0;
 							var a = v * 90;
@@ -1228,8 +1229,6 @@ var PicoAudio = (function(){
 				})(reserve);
 			}
 			cnt++;
-			preTime = performance.now();
-			preTimeC = context.currentTime;
 			return updateNowTime;
 		})(updateNowTime);
 	};
@@ -1251,7 +1250,7 @@ var PicoAudio = (function(){
 		this.initStatus();
 		if (this.debug) {
 			var syoriTimeE = performance.now();
-			console.log("setData time", syoriTimeE - syoriTimeS)
+			console.log("setData time", syoriTimeE - syoriTimeS);
 		}
 		return this;
 	};
