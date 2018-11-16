@@ -84,7 +84,7 @@ var PicoAudio = (function(){
 					var t = x ^ (x << 11);
 					x = y; y = z; z = w;
 					var r = w = (this.w ^ (this.w >>> 19)) ^ (t ^ (t >>> 8));
-					r = Math.abs(r) % 2;
+					r = Math.abs(r) / 2147483648 % 2;
 					this.whitenoise.getChannelData(ch)[i] = r * 2 - 1;
 				}
 			}
@@ -283,13 +283,14 @@ var PicoAudio = (function(){
 		var gainNode = note.gainNode;
 		var stopGainNode = note.stopGainNode;
 		var start = note.start;
-		var velocity = 1;//0.9;
+		var velocity = 1; // ドラム全体の音量調整用
 		var note2 = this.createBaseNote(option, false, true);
 		var oscillator = note2.oscillator;
 		var gainNode2 = note2.gainNode;
 		var stopGainNode2 = note2.stopGainNode;
 		var that = this;
 
+		// oscillator.frequency.setValueAtTime()がcurrentTimeより遅れると周波数設定がされないので対策
 		if (start < this.context.currentTime) start = this.context.currentTime;
 		var stopAudioTime;
 		var stopAudioTime2;
