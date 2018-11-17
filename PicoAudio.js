@@ -298,8 +298,8 @@ var PicoAudio = (function(){
 
 		// oscillator.frequency.setValueAtTime()がcurrentTimeより遅れると周波数設定がされないので対策
 		if (start < this.context.currentTime) start = this.context.currentTime;
-		var stopAudioTime;
-		var stopAudioTime2;
+		var stopAudioTime = 0;
+		var stopAudioTime2 = 0;
 		switch(option.pitch){
 			// Bass Drum
 			case 35: // Acoustic Bass Drum
@@ -691,6 +691,7 @@ var PicoAudio = (function(){
 			case 78: // Close Cuica
 			case 79: // Open Cuica
 				// w
+				gainNode.gain.value = 0;
 				stopAudioTime = 0;
 				// s
 				var len = 0.18;
@@ -706,12 +707,103 @@ var PicoAudio = (function(){
 				gainNode2.gain.linearRampToValueAtTime(0, start+len);
 				stopAudioTime2 = len;
 				break;
-			// GM Other
+			// GS, GM2
 			case 27: // High Q
+				// w
+				source.playbackRate.value = 1;
+				gainNode.gain.setValueAtTime(velocity*1, start);
+				gainNode.gain.linearRampToValueAtTime(0, start+0.002);
+				stopAudioTime = 0.002;
+				// s
+				oscillator.frequency.setValueAtTime(1500, start);
+				oscillator.frequency.linearRampToValueAtTime(280, start+0.015);
+				oscillator.frequency.linearRampToValueAtTime(0, start+0.07);
+				gainNode2.gain.setValueAtTime(velocity*1.9, start);
+				gainNode2.gain.linearRampToValueAtTime(0, start+0.07);
+				stopAudioTime2 = 0.07;
+				break;
 			case 28: // Slap
+				// w
+				source.playbackRate.value = 1;
+				gainNode.gain.setValueAtTime(velocity*1.3, start);
+				gainNode.gain.linearRampToValueAtTime(0, start+0.010);
+				gainNode.gain.setValueAtTime(velocity*1.1, start+0.0101);
+				gainNode.gain.linearRampToValueAtTime(0, start+0.020);
+				gainNode.gain.setValueAtTime(velocity*0.9, start+0.0201);
+				gainNode.gain.setTargetAtTime(0, start+0.0201, 0.03);
+				stopAudioTime = 0.2;
+				// s
+				gainNode2.gain.value = 0;
+				stopAudioTime2 = 0;
+				break;
 			case 29: // Scratch Push
 			case 30: // Scratch Pull
+				var t1 = option.pitch==29 ? 0.05 : 0.07;
+				var t2 = option.pitch==29 ? 0.06 : 0.09;
+				var t3 = option.pitch==29 ? 0.07 : 0.11;
+				var t4 = option.pitch==29 ? 0.1 : 0.15;
+				var t5 = option.pitch==29 ? 0.3 : 0.4;
+				// w
+				var r1 = option.pitch==29 ? 0.1 : 0.06;
+				var r2 = option.pitch==29 ? 0.3 : 0.2;
+				var r3 = option.pitch==29 ? 0.18 : 0.12;
+				source.playbackRate.setValueAtTime(r1, start);
+				source.playbackRate.linearRampToValueAtTime(r2, start+t1);
+				source.playbackRate.linearRampToValueAtTime(0, start+t2);
+				source.playbackRate.linearRampToValueAtTime(r2, start+t3);
+				source.playbackRate.linearRampToValueAtTime(r3, start+t4);
+				source.playbackRate.linearRampToValueAtTime(0, start+t5);
+				gainNode.gain.setValueAtTime(0, start);
+				gainNode.gain.linearRampToValueAtTime(velocity*0.4, start+t1);
+				gainNode.gain.linearRampToValueAtTime(velocity*0.1, start+t3);
+				gainNode.gain.linearRampToValueAtTime(velocity*0.3, start+t4);
+				gainNode.gain.linearRampToValueAtTime(0, start+t5);
+				stopAudioTime = t5;
+				// s
+				var r4 = option.pitch==29 ? 500 : 400;
+				var r5 = option.pitch==29 ? 1950 : 1200;
+				var r6 = option.pitch==29 ? 430 : 250;
+				oscillator.frequency.setValueAtTime(r4, start);
+				oscillator.frequency.linearRampToValueAtTime(r5, start+t1);
+				oscillator.frequency.linearRampToValueAtTime(0, start+t2);
+				oscillator.frequency.linearRampToValueAtTime(r5, start+t3);
+				oscillator.frequency.linearRampToValueAtTime(r6, start+t4);
+				oscillator.frequency.linearRampToValueAtTime(0, start+t5);
+				gainNode2.gain.setValueAtTime(0, start);
+				gainNode2.gain.linearRampToValueAtTime(velocity*0.7, start+t1);
+				gainNode2.gain.linearRampToValueAtTime(velocity*0.2, start+t3);
+				gainNode2.gain.linearRampToValueAtTime(velocity*0.6, start+t4);
+				gainNode2.gain.linearRampToValueAtTime(0, start+t5);
+				stopAudioTime2 = t5;
+				break;
 			case 31: // Sticks
+				// w
+				//source.playbackRate.value = 0.35;
+				source.playbackRate.setValueAtTime(0.3, start);
+				source.playbackRate.linearRampToValueAtTime(0.4, start+0.015);
+				gainNode.gain.setValueAtTime(velocity*0.8, start);
+				gainNode.gain.setTargetAtTime(0, start, 0.03);
+				stopAudioTime = 0.5;
+				// s
+				oscillator.type = "square";
+				oscillator.frequency.setValueAtTime(3080, start);
+				gainNode2.gain.setValueAtTime(velocity*0.3, start);
+				gainNode2.gain.setTargetAtTime(0, start, 0.01);
+				stopAudioTime2 = 0;
+				break;
+				// // w
+				// source.playbackRate.value = 1;
+				// gainNode.gain.setValueAtTime(velocity*0.8, start);
+				// // gainNode.gain.linearRampToValueAtTime(0, start+0.2);
+				// gainNode.gain.setTargetAtTime(0, start, 0.05);
+				// stopAudioTime = 0.5;
+				// // s
+				// oscillator.frequency.setValueAtTime(25000, start);
+				// oscillator.frequency.linearRampToValueAtTime(2450, start+0.5);
+				// gainNode2.gain.setValueAtTime(velocity*1.5, start);
+				// gainNode2.gain.setTargetAtTime(0, start, 0.02);
+				// stopAudioTime2 = 0.3;
+				// break;
 			case 32: // Square Click
 			case 33: // Metronome Click
 			case 34: // Metronome Bell
