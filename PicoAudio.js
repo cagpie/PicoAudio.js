@@ -742,7 +742,7 @@ var PicoAudio = (function(){
 				var t2 = option.pitch==29 ? 0.06 : 0.09;
 				var t3 = option.pitch==29 ? 0.07 : 0.11;
 				var t4 = option.pitch==29 ? 0.1 : 0.15;
-				var t5 = option.pitch==29 ? 0.3 : 0.4;
+				var t5 = option.pitch==29 ? 0.25 : 0.4;
 				// w
 				var r1 = option.pitch==29 ? 0.1 : 0.06;
 				var r2 = option.pitch==29 ? 0.3 : 0.2;
@@ -778,35 +778,49 @@ var PicoAudio = (function(){
 				break;
 			case 31: // Sticks
 				// w
-				//source.playbackRate.value = 0.35;
-				source.playbackRate.setValueAtTime(0.3, start);
-				source.playbackRate.linearRampToValueAtTime(0.4, start+0.015);
-				gainNode.gain.setValueAtTime(velocity*0.8, start);
-				gainNode.gain.setTargetAtTime(0, start, 0.03);
-				stopAudioTime = 0.5;
+				source.playbackRate.setValueAtTime(0.4, start);
+				source.playbackRate.linearRampToValueAtTime(0.5, start+0.015);
+				gainNode.gain.setValueAtTime(velocity*0.6, start);
+				gainNode.gain.setTargetAtTime(0, start, 0.035);
+				stopAudioTime = 0.3;
+				// s
+				//oscillator.type = "square";
+				oscillator.frequency.setValueAtTime(3140, start);
+				gainNode2.gain.setValueAtTime(velocity*1.1, start);
+				gainNode2.gain.setTargetAtTime(0, start, 0.012);
+				stopAudioTime2 = 0.3;
+				break;
+			case 32: // Square Click
+				// w
+				gainNode.gain.value = 0;
+				stopAudioTime = 0;
 				// s
 				oscillator.type = "square";
-				oscillator.frequency.setValueAtTime(3080, start);
-				gainNode2.gain.setValueAtTime(velocity*0.3, start);
-				gainNode2.gain.setTargetAtTime(0, start, 0.01);
-				stopAudioTime2 = 0;
+				oscillator.frequency.setValueAtTime(333, start);
+				gainNode2.gain.setValueAtTime(0, start);
+				gainNode2.gain.linearRampToValueAtTime(velocity*4, start+0.0016);
+				gainNode2.gain.linearRampToValueAtTime(0, start+0.0032);
+				stopAudioTime2 = 0.0032;
 				break;
-				// // w
-				// source.playbackRate.value = 1;
-				// gainNode.gain.setValueAtTime(velocity*0.8, start);
-				// // gainNode.gain.linearRampToValueAtTime(0, start+0.2);
-				// gainNode.gain.setTargetAtTime(0, start, 0.05);
-				// stopAudioTime = 0.5;
-				// // s
-				// oscillator.frequency.setValueAtTime(25000, start);
-				// oscillator.frequency.linearRampToValueAtTime(2450, start+0.5);
-				// gainNode2.gain.setValueAtTime(velocity*1.5, start);
-				// gainNode2.gain.setTargetAtTime(0, start, 0.02);
-				// stopAudioTime2 = 0.3;
-				// break;
-			case 32: // Square Click
 			case 33: // Metronome Click
 			case 34: // Metronome Bell
+				// w
+				source.playbackRate.setValueAtTime(0.17, start);
+				source.playbackRate.linearRampToValueAtTime(0.22, start+0.01);
+				gainNode.gain.setValueAtTime(velocity*1.5, start);
+				gainNode.gain.setTargetAtTime(0, start, 0.015);
+				stopAudioTime = 0.3;
+				// s
+				if (option.pitch==34) {
+					oscillator.frequency.setValueAtTime(2040, start);
+					gainNode2.gain.setValueAtTime(velocity*1.5, start);
+					gainNode2.gain.setTargetAtTime(0, start, 0.12);
+					stopAudioTime2 = 1.1;
+				} else {
+					gainNode2.gain.value = 0;
+					stopAudioTime2 = 0;
+				}
+				break;
 			case 82: // Shaker
 			case 83: // Jingle Bell
 			case 84: // Bell Tree
@@ -816,8 +830,9 @@ var PicoAudio = (function(){
 				stopAudioTime = 0;
 				stopAudioTime2 = 0;
 				break;
-			default:
-				stopAudioTime = 0;
+			default: 
+				source.playbackRate.value = option.pitch/69*2;
+				stopAudioTime = 0.05;
 				stopAudioTime2 = 0;
 				break;
 		}
@@ -1328,7 +1343,7 @@ var PicoAudio = (function(){
 			// サウンドが重すぎる
 			if(that.states.latencyLimitTime > 200){
 				cTimeSum = pTimeSum;
-				that.states.latencyLimitTime -= 30;
+				that.states.latencyLimitTime -= 1;
 				if(that.states.latencyLimitTime > 1000) that.states.latencyLimitTime = 1000;
 				// ノート先読みをかなり小さくする（フリーズ対策）
 				that.states.updateBufMaxTime = 1;
