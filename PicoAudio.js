@@ -259,13 +259,15 @@ var PicoAudio = (function(){
 			}
 			case 119: // Reverse Cymbal
 			{
-				gainNode.gain.value *= 0;
+				gainNode.gain.value = 0;
 				that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
-				var note2 = this.createBaseNote(option, true, false);
+				var note2 = this.createBaseNote(option, true, true);
+				if(note2.isGainValueZero) break;
 				note2.oscillator.playbackRate.setValueAtTime((option.pitch+1)/128, note.start);
 				note2.gainNode.gain.setValueAtTime(0, note.start);
-				note2.gainNode.gain.linearRampToValueAtTime(1.3, note.start+2);
+				note2.gainNode.gain.linearRampToValueAtTime(1.5, note.start+2);
 				that.stopAudioNode(note2.oscillator, note.stop, note2.stopGainNode);
+				break;
 			}
 			default:{
 				gainNode.gain.value *= 1.1;
@@ -780,13 +782,13 @@ var PicoAudio = (function(){
 				// w
 				source.playbackRate.setValueAtTime(0.4, start);
 				source.playbackRate.linearRampToValueAtTime(0.5, start+0.015);
-				gainNode.gain.setValueAtTime(velocity*0.6, start);
+				gainNode.gain.setValueAtTime(velocity*1.2, start);
 				gainNode.gain.setTargetAtTime(0, start, 0.035);
 				stopAudioTime = 0.3;
 				// s
 				//oscillator.type = "square";
 				oscillator.frequency.setValueAtTime(3140, start);
-				gainNode2.gain.setValueAtTime(velocity*1.1, start);
+				gainNode2.gain.setValueAtTime(velocity*1.2, start);
 				gainNode2.gain.setTargetAtTime(0, start, 0.012);
 				stopAudioTime2 = 0.3;
 				break;
@@ -813,7 +815,7 @@ var PicoAudio = (function(){
 				// s
 				if (option.pitch==34) {
 					oscillator.frequency.setValueAtTime(2040, start);
-					gainNode2.gain.setValueAtTime(velocity*1.5, start);
+					gainNode2.gain.setValueAtTime(velocity*1, start);
 					gainNode2.gain.setTargetAtTime(0, start, 0.12);
 					stopAudioTime2 = 1.1;
 				} else {
