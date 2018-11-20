@@ -614,8 +614,8 @@ var PicoAudio = (function(){
 				source.playbackRate.value = 1;
 				gainNode.gain.setValueAtTime(velocity*0.3, start);
 				gainNode.gain.linearRampToValueAtTime(velocity*0.8, start+0.03);
-				gainNode.gain.linearRampToValueAtTime(0, start+0.1);
-				stopAudioTime = 0.05;
+				gainNode.gain.linearRampToValueAtTime(0, start+0.08);
+				stopAudioTime = 0.08;
 				// s
 				gainNode2.gain.value = 0;
 				stopAudioTime2 = 0;
@@ -786,7 +786,6 @@ var PicoAudio = (function(){
 				gainNode.gain.setTargetAtTime(0, start, 0.035);
 				stopAudioTime = 0.3;
 				// s
-				//oscillator.type = "square";
 				oscillator.frequency.setValueAtTime(3140, start);
 				gainNode2.gain.setValueAtTime(velocity*1.2, start);
 				gainNode2.gain.setTargetAtTime(0, start, 0.012);
@@ -824,13 +823,72 @@ var PicoAudio = (function(){
 				}
 				break;
 			case 82: // Shaker
+				// w
+				source.playbackRate.value = 1;
+				gainNode.gain.setValueAtTime(velocity*0.5, start);
+				gainNode.gain.linearRampToValueAtTime(velocity, start+0.02);
+				gainNode.gain.linearRampToValueAtTime(0, start+0.07);
+				stopAudioTime = 0.07;
+				// s
+				gainNode2.gain.value = 0;
+				stopAudioTime2 = 0;
+				break;
 			case 83: // Jingle Bell
+				// w
+				source.playbackRate.value = 1;
+				gainNode.gain.setValueAtTime(0, start);
+				gainNode.gain.linearRampToValueAtTime(velocity*1.2, start+0.015);
+				gainNode.gain.setTargetAtTime(0, start+0.015, 0.06);
+				stopAudioTime = 0.5;
+				// s
+				oscillator.type = "triangle";
+				oscillator.frequency.setValueAtTime(2709, start);
+				oscillator.frequency.linearRampToValueAtTime(2657, start+0.3);
+				gainNode2.gain.setValueAtTime(0, start);
+				gainNode2.gain.linearRampToValueAtTime(velocity*0.7, start+0.025);
+				gainNode2.gain.setTargetAtTime(0, start+0.025, 0.07);
+				stopAudioTime2 = 0.5;
+				break;
 			case 84: // Bell Tree
+				// w s
+				source.playbackRate.value = 1;
+				for(var i=0; i<28; i++){
+					gainNode.gain.setValueAtTime(velocity*0.1, start+i/24*0.45);
+					gainNode.gain.setTargetAtTime(0, start+i/24*0.45, 0.01);
+					oscillator.frequency.setValueAtTime(1380*(1+i/24), start+i/24*0.45);
+					gainNode2.gain.setValueAtTime(velocity*(0.2+i/24), start+i/24*0.45);
+					gainNode2.gain.setTargetAtTime(0, start+i/24*0.45, i==27 ? 0.2 : 0.01);
+				}
+				stopAudioTime = 0.5;
+				stopAudioTime2 = 1.5;
+				break;
 			case 85: // Castanets
+				// w
+				source.playbackRate.setValueAtTime(0.35, start);
+				gainNode.gain.setValueAtTime(velocity*1.3, start);
+				gainNode.gain.setTargetAtTime(0, start, 0.01);
+				stopAudioTime = 0.1;
+				// s
+				oscillator.frequency.setValueAtTime(1730, start);
+				gainNode2.gain.setValueAtTime(velocity*0.5, start);
+				gainNode2.gain.setTargetAtTime(0, start, 0.01);
+				stopAudioTime2 = 0.1;
+				break;
 			case 86: // Mute Surdo
 			case 87: // Open Surdo
-				stopAudioTime = 0;
-				stopAudioTime2 = 0;
+				// w
+				source.playbackRate.setValueAtTime(0.020, start);
+				source.playbackRate.linearRampToValueAtTime(0.015, start+0.5);
+				gainNode.gain.setValueAtTime(0, start);
+				gainNode.gain.linearRampToValueAtTime(velocity*2, start+0.005);
+				gainNode.gain.setTargetAtTime(0, start+0.005, option.pitch==86 ? 0.03 : 0.06);
+				stopAudioTime = 0.5;
+				// s
+				oscillator.frequency.setValueAtTime(88, start);
+				oscillator.frequency.linearRampToValueAtTime(86, start+0.3);
+				gainNode2.gain.setValueAtTime(velocity*2.5, start);
+				gainNode2.gain.setTargetAtTime(0, start, option.pitch==86 ? 0.1 : 0.3);
+				stopAudioTime2 = option.pitch==86 ? 0.5 : 1.5;
 				break;
 			default: 
 				source.playbackRate.value = option.pitch/69*2;
