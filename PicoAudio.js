@@ -2066,7 +2066,7 @@ var PicoAudio = (function(){
 								nextSameNoteOnInterval: -1,
 								drumStopTime: 2 // 再生時に使う
 							};
-							// 前回鳴っていたの同音ノートに次のノートオン時間を入れる
+							// 前回鳴っていた同音ノートに次のノートオン時間を入れる
 							var prevNote = nextNoteOnAry[smf[p+1]];
 							if(prevNote){
 								prevNote.nextSameNoteOnInterval = time - prevNote.startTime;
