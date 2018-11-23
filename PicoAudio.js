@@ -52,7 +52,7 @@ var PicoAudio = (function(){
 		// Fallback
 		// Unsupport performance.now()
 		if (typeof performance==="undefined") {
-			performance = {};
+			window.performance = {};
 		}
 		if (!performance.now) {
 			performance.now = function now() {
