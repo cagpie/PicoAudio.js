@@ -140,10 +140,12 @@ var PicoAudio = (function(){
 		this.chorusOscillator.start(0);
 		
 		// リバーブON設定を引き継ぐ。未設定ならパフォーマンス計測する(Tonyu2用)
-		if(_picoAudio){
-			this.settings.isReverb = _picoAudio.settings.isReverb;
-		} else {
-			this.settings.isReverb = this.measurePerformanceReverb();
+		if(this.isTonyu2){
+			if(_picoAudio){
+				this.settings.isReverb = _picoAudio.settings.isReverb;
+			} else {
+				this.settings.isReverb = this.measurePerformanceReverb();
+			}
 		}
 	}
 
@@ -265,7 +267,7 @@ var PicoAudio = (function(){
 				if(note2.isGainValueZero) break;
 				note2.oscillator.playbackRate.setValueAtTime((option.pitch+1)/128, note.start);
 				note2.gainNode.gain.setValueAtTime(0, note.start);
-				note2.gainNode.gain.linearRampToValueAtTime(1.5, note.start+2);
+				note2.gainNode.gain.linearRampToValueAtTime(1.3, note.start+2);
 				that.stopAudioNode(note2.oscillator, note.stop, note2.stopGainNode);
 				break;
 			}
@@ -1403,7 +1405,7 @@ var PicoAudio = (function(){
 			// サウンドが重すぎる
 			if(that.states.latencyLimitTime > 200){
 				cTimeSum = pTimeSum;
-				that.states.latencyLimitTime -= 1;
+				that.states.latencyLimitTime -= 5;
 				if(that.states.latencyLimitTime > 1000) that.states.latencyLimitTime = 1000;
 				// ノート先読みをかなり小さくする（フリーズ対策）
 				that.states.updateBufMaxTime = 1;
@@ -1685,7 +1687,7 @@ var PicoAudio = (function(){
 
 	PicoAudio.prototype.measurePerformanceReverb = function(){
 		// 0.5秒パフォーマンス計測して、リバーブONにするか判断する
-		var max = 150000; // 0.5秒以内にここまで計算できればリバーブON
+		var max = 500000; // 0.5秒以内にここまで計算できればリバーブON
 		var startTime = performance.now();
 		for (var i=0;i<max;i++) {
 			if (performance.now()-startTime>=500) break;
