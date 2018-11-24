@@ -853,11 +853,12 @@ var PicoAudio = (function(){
 				break;
 			case 84: // Bell Tree
 				// w s
+				var invert = false;
 				source.playbackRate.value = 1;
 				for(var i=0; i<28; i++){
 					gainNode.gain.setValueAtTime(velocity*0.1, start+i/24*0.45);
 					gainNode.gain.setTargetAtTime(0, start+i/24*0.45, 0.01);
-					oscillator.frequency.setValueAtTime(1380*(1+i/24), start+i/24*0.45);
+					oscillator.frequency.setValueAtTime(1380*(1+(invert ? (24-i)/24 : i/24)), start+i/24*0.45);
 					gainNode2.gain.setValueAtTime(velocity*(0.2+i/24), start+i/24*0.45);
 					gainNode2.gain.setTargetAtTime(0, start+i/24*0.45, i==27 ? 0.2 : 0.01);
 				}
