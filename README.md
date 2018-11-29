@@ -4,7 +4,7 @@
 
 MIDIをブラウザで再生するためのJavaScriptライブラリです。
 
-バイナリをパースし、WebAudioAPIで再生します。
+ウェブ上でMIDIファイルをパースし、WebAudioAPIで再生します。
 
 [Picotune]( http://picotune.me/ )の、MIDI再生部分になります。 
 
