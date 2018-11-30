@@ -30,10 +30,28 @@ var PicoAudio = (function(){
 			isOfflineRendering: false, // TODO 演奏データを作成してから演奏する
 			isSameDrumSoundOverlap: false // 同じドラムの音が重なることを許容するか
 		};
-		this.trigger = { isNoteTrigger: true, noteOn: function(){}, noteOff: function(){}, songEnd: function(){} };
-		this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
-			, playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:50, updateBufMaxTime:150, updateIntervalTime:0
-		 	, latencyLimitTime:0 };
+		this.events = [];
+		this.trigger = {
+			isNoteTrigger: true,
+			play: function(){},
+			stop: function(){},
+			noteOn: function(){},
+			noteOff: function(){},
+			songEnd: function(){}
+		};
+		this.states = {
+			isPlaying: false,
+			startTime:0,
+			stopTime:0,
+			stopFuncs:[],
+			webMIDIWaitState:null,
+			webMIDIStopTime:0,
+			playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+			updateBufTime:50,
+			updateBufMaxTime:50,
+			updateIntervalTime:0,
+			latencyLimitTime:0
+		};
 		this.hashedDataList = [];
 		this.hashedMessageList = [];
 		this.playData = null;
@@ -66,6 +84,7 @@ var PicoAudio = (function(){
 	}
 
 	PicoAudio.prototype.init = function(_audioContext, _picoAudio){
+		if(this.isStarted) return;
 		this.isStarted = true;
 		var AudioContext = window.AudioContext || window.webkitAudioContext;
 		this.context = _audioContext ? _audioContext : new AudioContext();
@@ -147,6 +166,23 @@ var PicoAudio = (function(){
 				this.settings.isReverb = this.measurePerformanceReverb();
 			}
 		}
+	}
+
+	PicoAudio.prototype.addEventListener = function(type, func){
+		// type = EventName (play, stop, noteOn...)
+		this.events.push({type: type, func: func});
+	}
+
+	PicoAudio.prototype.fireEvent = function(type, option){
+		this.events.forEach(function(event){
+			if (event.type == type){
+				try {
+					event.func(option);
+				} catch(e) {
+					console.log(e);
+				}
+			}
+		});
 	}
 
 	PicoAudio.prototype.createNote = function(option){
@@ -1272,6 +1308,8 @@ var PicoAudio = (function(){
 				}
 			}, 1000);
 		}
+		this.trigger.stop();
+		this.fireEvent('stop');
 	};
 
 	PicoAudio.prototype.play = function(isSongLooping){
@@ -1321,6 +1359,7 @@ var PicoAudio = (function(){
 				// 予定の時間以降に曲終了
 				trigger.songEnd();
 				that.onSongEnd();
+				that.fireEvent('songEnd');
 			} else {
 				// 処理落ちしたりしてまだ演奏中の場合、1ms後に曲終了コールバックを呼び出すよう予約
 				reserveSongEnd = setTimeout(reserveSongEndFunc, 1);
@@ -1344,6 +1383,10 @@ var PicoAudio = (function(){
 		var pTimeSum = 0;
 		var cTimeSum = 0;
 		var cnt=0;
+
+		trigger.play();
+		this.fireEvent('play');
+
 		(function updateNote(updatePreTime){
 			var updateNowTime = performance.now();
 			var updateBufTime = updateNowTime - updatePreTime;
@@ -1583,6 +1626,23 @@ var PicoAudio = (function(){
 		}
 		return this;
 	};
+
+	PicoAudio.prototype.getChannels = function(){
+		return this.channels;
+	}
+
+	PicoAudio.prototype.setChannels = function(channels){
+		var that = this;
+		channels.forEach(function(channel, idx){
+			that.channels[idx] = channel;
+		})
+	}
+
+	PicoAudio.prototype.initChannels = function(){
+		for(var i=0; i<16; i++){
+			this.channels[i] = [0,0,1];
+		}
+	}
 
 	PicoAudio.prototype.getMasterVolume = function(){
 		return this.settings.masterVolume;
