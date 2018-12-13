@@ -3,11 +3,13 @@ module.exports = {
   //mode: 'production',
   context: __dirname + '/src',
   entry: {
-    'dist/PicoAudio': './PicoAudio.js'
+    'dist/PicoAudio': './main.js'
   },
   output: {
     path: __dirname,
-    filename: './[name].js'
+    filename: './[name].js',
+    // library: 'PicoAudio',
+    // libraryTarget: 'var'
   },
   devServer: {
     contentBase: 'dist',

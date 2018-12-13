@@ -1,8 +1,8 @@
 {
-  "name": "test",
+  "name": "pico-audio.js",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
     "setup": "npm install",
     "build": "webpack",
