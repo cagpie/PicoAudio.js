@@ -1,37 +1,50 @@
+/**
+ * time(秒)からtickを求める
+ * @param {number} time 
+ * @returns {number} tick
+ */
 export default function getTiming(time) {
-    var imin = 0;
-    var imax = this.tempoTrack.length - 1;
-    var imid = -1;
-    if(this.tempoTrack && this.tempoTrack.length >= 1){
-        if(time>=this.tempoTrack[this.tempoTrack.length-1].time){
+    let imid = -1;
+
+    // tempo変更がある場合、timeを検索する //
+    if (this.tempoTrack && this.tempoTrack.length >= 1) {
+        // 最後のtimeを超える場合、最後のtickを返す
+        if (time >= this.tempoTrack[this.tempoTrack.length-1].time) {
             return this.tempoTrack[this.tempoTrack.length-1].timing;
         }
-        while(true){
+        // 二分探索でtimeを探す
+        let imin = 0;
+        let imax = this.tempoTrack.length - 1;
+        while (true) {
             imid = Math.floor(imin + (imax - imin) / 2);
-            var tempTime = this.tempoTrack[imid].time;
-            if(time < tempTime){
+            const tempTime = this.tempoTrack[imid].time;
+            if (time < tempTime) {
                 imax = imid - 1;
-            } else if(time > tempTime){
+            } else if (time > tempTime) {
                 imin = imid + 1;
             } else {
                 break;
             }
-            if(imin > imax){
-                if(time < tempTime) imid--;
+            if (imin > imax) {
+                if (time < tempTime) imid--;
                 break;
             }
         }
     }
-    if(imid>=0){
-        var tempoObj = this.tempoTrack[imid];
-        var baseTime = tempoObj.time;
-        var timing = tempoObj.timing;
-        var tempo = tempoObj.value;
-    } else {
-        var baseTime = 0;
-        var timing = 0;
-        var tempo = 120;
+
+    let baseTime = 0;
+    let tick = 0;
+    let tempo = 120;
+    if (imid >= 0) { // timeを探索して見つかった場合
+        // 引数timeに一番近いtimeを取得
+        const tempoObj = this.tempoTrack[imid];
+        baseTime = tempoObj.time;
+        tick = tempoObj.timing;
+        tempo = tempoObj.value;
     }
-    timing += (time - baseTime) / (60 / tempo / this.settings.resolution);
-    return timing;
-};
+
+    // timeからtickを算出する
+    // 引数timeに一番近いtimeのtick ＋ 現在timeから残りのtickを算出 ＝ 現在のtick
+    tick += (time - baseTime) / (60 / tempo / this.settings.resolution);
+    return tick;
+}

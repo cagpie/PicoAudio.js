@@ -13,7 +13,7 @@ export default function picoAudioConstructor(_audioContext, _picoAudio) {
         WebMIDIPortOutputs: null,
         WebMIDIPortOutput: null,
         WebMIDIPort: -1, // -1:auto
-        WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない？)
+        WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない)
         isReverb: true, // リバーブONにするか
         reverbVolume: 1.5,
         isChorus: true,
@@ -31,47 +31,53 @@ export default function picoAudioConstructor(_audioContext, _picoAudio) {
     this.events = [];
     this.trigger = {
         isNoteTrigger: true,
-        play: function(){},
-        stop: function(){},
-        noteOn: function(){},
-        noteOff: function(){},
-        songEnd: function(){}
+        play: ()=>{},
+        stop: ()=>{},
+        noteOn: ()=>{},
+        noteOff: ()=>{},
+        songEnd: ()=>{}
     };
     this.states = {
         isPlaying: false,
-        startTime:0,
-        stopTime:0,
-        stopFuncs:[],
-        webMIDIWaitState:null,
-        webMIDIStopTime:0,
-        playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        updateBufTime:50,
-        updateBufMaxTime:50,
-        updateIntervalTime:0,
-        latencyLimitTime:0
+        startTime: 0,
+        stopTime: 0,
+        stopFuncs: [],
+        webMIDIWaitState: null,
+        webMIDIStopTime: 0,
+        playIndices: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        updateBufTime: 50,
+        updateBufMaxTime: 50,
+        updateIntervalTime: 0,
+        latencyLimitTime: 0
     };
     this.hashedDataList = [];
     this.hashedMessageList = [];
     this.playData = null;
     this.channels = [];
-    this.tempoTrack = [{ timing:0, value:120 },{ timing:0, value:120 }];
+    this.tempoTrack = [
+        { timing: 0, value: 120 },
+        { timing: 0, value: 120 }
+    ];
     this.cc111Time = -1;
     this.onSongEndListener = null;
 
-    for(var i=0; i<17; i++)
-        this.channels.push([0,0,1]);
+    // チャンネルの設定値（音色, 減衰, 音量） //
+    for (let i=0; i<17; i++) {
+        this.channels.push([0, 0, 1]);
+    }
+
     // AudioContextがある場合はそのまま初期化、なければAudioContextを用いる初期化をinit()で
-    if(_audioContext){
+    if (_audioContext) {
         this.init(_audioContext, _picoAudio);
     }
 
     // Fallback
     // Unsupport performance.now()
-    if (typeof performance==="undefined") {
+    if (typeof performance === "undefined") {
         window.performance = {};
     }
     if (!performance.now) {
-        performance.now = function now() {
+        performance.now = () => {
             return Date.now();
         };
     }

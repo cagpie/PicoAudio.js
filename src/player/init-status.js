@@ -1,27 +1,43 @@
 export default function initStatus(isSongLooping, isLight) {
-    if(this.settings.isWebMIDI){ // initStatus()連打の対策
-        if(this.states.webMIDIWaitState!=null) return;
+    // WebMIDI使用中の場合、initStatus()連打の対策 //
+    if (this.settings.isWebMIDI) { 
+        if (this.states.webMIDIWaitState != null) return;
     }
+
+    // 演奏中の場合、停止する //
     this.stop(isSongLooping);
-    var tempwebMIDIStopTime = this.states.webMIDIStopTime;
-    this.states = { isPlaying: false, startTime:0, stopTime:0, stopFuncs:[], webMIDIWaitState:null, webMIDIStopTime:0
-        , playIndices:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], updateBufTime:this.states.updateBufTime
-        , updateBufMaxTime:this.states.updateBufMaxTime, updateIntervalTime:this.states.updateIntervalTime
-         , latencyLimitTime:this.states.latencyLimitTime, noteOnAry:[], noteOffAry:[] };
-    this.states.webMIDIStopTime = tempwebMIDIStopTime; // 値を初期化しない
-    if(this.settings.isWebMIDI && !isLight){
-        if(isSongLooping)
+
+    // statesを初期化 //
+    this.states = {
+        isPlaying: false,
+        startTime: 0,
+        stopTime: 0,
+        stopFuncs: [],
+        webMIDIWaitState: null,
+        webMIDIStopTime: this.states.webMIDIStopTime,
+        playIndices: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        updateBufTime: this.states.updateBufTime,
+        updateBufMaxTime: this.states.updateBufMaxTime,
+        updateIntervalTime: this.states.updateIntervalTime,
+        latencyLimitTime: this.states.latencyLimitTime,
+        noteOnAry: [],
+        noteOffAry: []
+    };
+
+    // WebMIDIの初期化・リセットメッセージ送信 //
+    if (this.settings.isWebMIDI && !isLight) {
+        if (isSongLooping)
             return;
-        if(this.settings.WebMIDIPortOutput==null){
+        if (this.settings.WebMIDIPortOutput == null) {
             this.startWebMIDI();
             return;
         }
-        if(this.settings.WebMIDIPortSysEx){
+        if (this.settings.WebMIDIPortSysEx) {
             // GM1システム・オン
             this.settings.WebMIDIPortOutput.send([0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7]);
         } else {
             // SysExの使用が拒否されているので、できる限り設定値を初期値に戻す
-            for(var t=0; t<16; t++){
+            for (let t=0; t<16; t++) {
                 this.settings.WebMIDIPortOutput.send([0xC0+t, 0]);
                 this.settings.WebMIDIPortOutput.send([0xE0+t, 0, 64]);
                 // ピッチあたりのずれがひどくなる場合がある　よくわからない

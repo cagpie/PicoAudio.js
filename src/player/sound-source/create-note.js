@@ -1,16 +1,17 @@
 export default function createNote(option) {
-    var note = this.createBaseNote(option, false, true, false, true); // oscillatorのstopはこちらで実行するよう指定
-    if(note.isGainValueZero) return null;
+    const note = this.createBaseNote(option, false, true, false, true); // oscillatorのstopはこちらで実行するよう指定
+    if (note.isGainValueZero) return null; // 
 
-    var oscillator = note.oscillator;
-    var gainNode = note.gainNode;
-    var stopGainNode = note.stopGainNode;
-    var isPizzicato = false;
-    var isNoiseCut = false;
-    var that = this;
+    const oscillator = note.oscillator;
+    const gainNode = note.gainNode;
+    const stopGainNode = note.stopGainNode;
+    let isPizzicato = false;
+    let isNoiseCut = false;
 
-    // 音色別の音色振り分け 書き方(ry
-    switch(this.channels[note.channel][0]/10 || option.instrument){
+    let note2;
+
+    // 音色の設定 //
+    switch (this.channels[note.channel][0]/10 || option.instrument) {
         // Sine
         case 0.1:
         case  6: case 15: case 24: case 26: case 46: case 50: case 51:
@@ -55,14 +56,14 @@ export default function createNote(option) {
         }
     }
 
-    // 音の終わりのプチプチノイズが気になるので、音の終わりに5ms減衰してノイズ軽減
-    if((oscillator.type == "sine" || oscillator.type == "triangle")
-        && !isPizzicato && note.stop - note.start > 0.01){
+    // 音の終わりのプチプチノイズが気になるので、音の終わりに5ms減衰してノイズ軽減 //
+    if ((oscillator.type == "sine" || oscillator.type == "triangle")
+        && !isPizzicato && note.stop - note.start > 0.01) {
         isNoiseCut = true;
     }
 
-    // 音色別の減衰　書き方ミスったなあ
-    switch(this.channels[note.channel][1]/10 || option.instrument){
+    // 減衰の設定 //
+    switch (this.channels[note.channel][1]/10 || option.instrument) {
         // ピッチカート系減衰
         case 0.2:
         case 12: case 13: case 45: case 55:
@@ -71,7 +72,7 @@ export default function createNote(option) {
             gainNode.gain.value *= 1.1;
             gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
             gainNode.gain.linearRampToValueAtTime(0.0, note.start+0.2);
-            that.stopAudioNode(oscillator, note.start+0.2, stopGainNode);
+            this.stopAudioNode(oscillator, note.start+0.2, stopGainNode);
             break;
         }
         // ピアノ程度に伸ばす系
@@ -81,9 +82,9 @@ export default function createNote(option) {
         {
             gainNode.gain.value *= 1.1;
             gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
-            var decay = (128-option.pitch)/64;
+            let decay = (128-option.pitch)/64;
             gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
-            that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
+            this.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
             break;
         }
         // ギター系
@@ -93,7 +94,7 @@ export default function createNote(option) {
             gainNode.gain.value *= 1.1;
             gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
             gainNode.gain.linearRampToValueAtTime(0.0, note.start+1.0+note.velocity*4);
-            that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
+            this.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
             break;
         }
         // 減衰していくけど終わらない系
@@ -105,30 +106,31 @@ export default function createNote(option) {
             gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
             gainNode.gain.setValueAtTime(gainNode.gain.value*0.95, note.start+0.1);
             gainNode.gain.linearRampToValueAtTime(0.0, note.start+2.0+note.velocity*10);
-            that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
+            this.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
             break;
         }
         case 119: // Reverse Cymbal
         {
             gainNode.gain.value = 0;
-            that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
-            var note2 = this.createBaseNote(option, true, true);
-            if(note2.isGainValueZero) break;
+            this.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
+            note2 = this.createBaseNote(option, true, true);
+            if (note2.isGainValueZero) break;
             note2.oscillator.playbackRate.setValueAtTime((option.pitch+1)/128, note.start);
             note2.gainNode.gain.setValueAtTime(0, note.start);
             note2.gainNode.gain.linearRampToValueAtTime(1.3, note.start+2);
-            that.stopAudioNode(note2.oscillator, note.stop, note2.stopGainNode);
+            this.stopAudioNode(note2.oscillator, note.stop, note2.stopGainNode);
             break;
         }
-        default:{
+        default: {
             gainNode.gain.value *= 1.1;
             gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
-            that.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
+            this.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
         }
     }
 
-    return function(){
-        that.stopAudioNode(oscillator, 0, stopGainNode, true);
-        if (note2 && note2.oscillator) that.stopAudioNode(note2.oscillator, 0, note2.stopGainNode, true);
+    // 音をストップさせる関数を返す //
+    return () => {
+        this.stopAudioNode(oscillator, 0, stopGainNode, true);
+        if (note2 && note2.oscillator) this.stopAudioNode(note2.oscillator, 0, note2.stopGainNode, true);
     };
 }

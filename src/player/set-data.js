@@ -2,7 +2,9 @@ export default function setData(data) {
     if (this.debug) {
         var syoriTimeS = performance.now();
     }
-    if(this.states.isPlaying) this.stop();
+
+    if (this.states.isPlaying) this.stop();
+
     this.playData = data;
     this.settings.resolution = data.header.resolution;
     this.settings.tempo = data.tempo || 120;
@@ -13,9 +15,11 @@ export default function setData(data) {
     this.firstNoteOnTime = data.firstNoteOnTime;
     this.lastNoteOffTime = data.lastNoteOffTime;
     this.initStatus();
+
     if (this.debug) {
-        var syoriTimeE = performance.now();
+        const syoriTimeE = performance.now();
         console.log("setData time", syoriTimeE - syoriTimeS);
     }
+
     return this;
 }

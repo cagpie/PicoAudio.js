@@ -19,11 +19,13 @@ import clearFunc from './player/stop-manager/clear-func.js';
 import getTime from './player/time/get-time.js';
 import getTiming from './player/time/get-timing.js';
 
-import measurePerformanceReverb from './performance/measure-performance-reverb.js';
+import measurePerformanceReverb from './util/measure-performance-reverb.js';
 
 import parseSMF from './smf/parse-smf.js';
 
-export class PicoAudio {
+import startWebMIDI from './web-midi/start-web-midi.js'
+
+class PicoAudio {
     constructor(_audioContext, _picoAudio) {
         picoAudioConstructor.call(this, _audioContext, _picoAudio);
     }
@@ -54,8 +56,8 @@ export class PicoAudio {
 
     // 時関関係 //
     // tickからtime(秒)を求める
-    getTime(timing) {
-        return getTime.call(this, timing);
+    getTime(tick) {
+        return getTime.call(this, tick);
     }
     // time(秒)からtickを求める
     getTiming(time) {
@@ -106,8 +108,8 @@ export class PicoAudio {
         this.events.push({type: type, func: func});
     }
     fireEvent(type, option) {
-        this.events.forEach(function(event){
-            if (event.type == type){
+        this.events.forEach((event) => {
+            if (event.type == type) {
                 try {
                     event.func(option);
                 } catch(e) {
@@ -120,13 +122,12 @@ export class PicoAudio {
         return this.channels;
     }
     setChannels(channels) {
-        var that = this;
-        channels.forEach(function(channel, idx){
-            that.channels[idx] = channel;
+        channels.forEach((channel, idx) => {
+            this.channels[idx] = channel;
         });
     }
     initChannels() {
-        for(var i=0; i<16; i++){
+        for (let i=0; i<16; i++) {
             this.channels[i] = [0,0,1];
         }
     }
@@ -162,13 +163,13 @@ export class PicoAudio {
         this.onSongEndListener = listener;
     }
     onSongEnd() {
-        if(this.onSongEndListener){
-            var isStopFunc = this.onSongEndListener();
-            if(isStopFunc) return;
+        if (this.onSongEndListener) {
+            const isStopFunc = this.onSongEndListener();
+            if (isStopFunc) return;
         }
-        if(this.settings.loop){
+        if (this.settings.loop) {
             this.initStatus(true);
-            if(this.settings.isCC111 && this.cc111Time != -1){
+            if (this.settings.isCC111 && this.cc111Time != -1) {
                 this.setStartTime(this.cc111Time);
             }
             this.play(true);
@@ -197,18 +198,6 @@ export class PicoAudio {
     }
     setChorusVolume(volume) {
         this.settings.chorusVolume = volume;
-    }
-    isAndroid() {
-        var u = navigator.userAgent.toLowerCase();
-        return u.indexOf("android") != -1 && u.indexOf("windows") == -1;
-    }
-    isFirefox() {
-        var u = navigator.userAgent.toLowerCase();
-        return u.indexOf("firefox") != -1;
-    }
-    isArmv7l() { // Raspberry Pi
-        var u = navigator.userAgent.toLowerCase();
-        return u.indexOf("armv7l") != -1;
     }
 }
 

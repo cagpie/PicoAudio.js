@@ -1,36 +1,46 @@
+import arrayDelete from '../util/array-splice.js';
+import ParseUtil from '../util/parse-util.js';
+
 export default function parseSMF(_smf) {
     if (this.debug) {
         console.log(_smf);
         var syoriTimeS = performance.now();
     }
-    var that = this;
-    var smf = new Uint8Array(_smf); // smf配列はデータ上書きするので_smfをディープコピーする
-    if(smf[0] != 77 || smf[1] != 84 || smf[2] != 104 || smf[3] != 100)
+
+    // smf配列はデータ上書きするので_smfをディープコピーする
+    const smf = new Uint8Array(_smf);
+
+    // SMFのフォーマットかどうかチェック //
+    if (smf[0] != 77 || smf[1] != 84 || smf[2] != 104 || smf[3] != 100)
         return "Not Sandard MIDI File.";
-    var data = new Object;
-    var p = 4;
-    var header = new Object();
-    header.size = getInt(smf, 4, 8);
+
+    // SMFのヘッダチャンクを解析 //
+    const data = {};
+    let p = 4;
+    const header = {};
+    header.size = ParseUtil.getInt(smf, 4, 8);
     header.format = smf[9];
-    header.trackcount = getInt(smf, 10, 12);
+    header.trackcount = ParseUtil.getInt(smf, 10, 12);
     header.timemanage = smf[12];
-    header.resolution = getInt(smf, 12, 14); // TODO 0除算防止。15bit目1のとき、https://sites.google.com/site/yyagisite/material/smfspec#ConductorTrack
-    p += 4+header.size;
-    var tempoTrack = new Array();
-    var beatTrack = new Array();
-    var channels = new Array();
-    var cc111Tick = -1;
-    var cc111Time = -1;
-    var firstNoteOnTiming = Number.MAX_SAFE_INTEGER; // 最初のノートオンのTick
-    var firstNoteOnTime = Number.MAX_SAFE_INTEGER;
-    var lastNoteOffTiming = 0; // 最後のノートオフのTick
-    var lastNoteOffTime = 0;
-    var chSize = this.settings.isWebMIDI ? 17 : 16;
-    for(var i=0; i<chSize; i++){
-        var channel = new Object();
+    header.resolution = ParseUtil.getInt(smf, 12, 14); // TODO 0除算防止。15bit目1のとき、https://sites.google.com/site/yyagisite/material/smfspec#ConductorTrack
+    p += 4 + header.size;
+
+    // 変数を用意 //
+    const tempoTrack = [];
+    const beatTrack = [];
+    const channels = [];
+    let cc111Tick = -1;
+    let cc111Time = -1;
+    let firstNoteOnTiming = Number.MAX_SAFE_INTEGER; // 最初のノートオンのTick
+    let firstNoteOnTime = Number.MAX_SAFE_INTEGER;
+    let lastNoteOffTiming = 0; // 最後のノートオフのTick
+    let lastNoteOffTime = 0;
+    const chSize = this.settings.isWebMIDI ? 17 : 16; // WebMIDI用に17chに全てのメッセージを入れるため17ch分作る
+    for (let i=0; i<chSize; i++) {
+        const channel = {};
         channels.push(channel);
-        // smfを読む順番を記録した索引配列を作る
-        // 型付き配列をリスト構造のように使う（リスト構造にすることで挿入処理を高速化する）
+        // smfを読む順番を記録した索引配列を作る //
+        // 型付き配列をリスト構造の配列のように使う（リスト構造にすることで挿入処理を高速化する）
         // [tick, smfMesLength, smfPtr, nextIndicesPtr, ...]
         channel.indices = new Int32Array(Math.floor(smf.length/8));
         channel.indicesLength = 0;
@@ -40,85 +50,98 @@ export default function parseSMF(_smf) {
         channel.indicesPre = 0; // 前回のinsert用ポインタ
         channel.notes = [];
     }
+
     if (this.debug) {
         var syoriTimeS1_1 = performance.now();
     }
-    var songLength = 0;
-    if(this.settings.isWebMIDI) var messages = [];
-    for(var t=0; t<header.trackcount; t++){
-        if(smf[p] != 77 || smf[p+1] != 84 || smf[p+2] != 114 || smf[p+3] != 107)
+
+    // トラックチャンクの解析 //
+    //   解析しながら、一旦デルタタイム順にソートした配列を作成する
+    //   そのあと、SMFの本解析をする
+    //   配列ソートを高速化するため、配列をリスト構造のように使っている
+    //   （リスト構造にすることで、配列要素のinsertのコストを小さくできる）
+    let songLength = 0;
+    for (let t=0; t<header.trackcount; t++) {
+        if (smf[p] != 77 || smf[p+1] != 84 || smf[p+2] != 114 || smf[p+3] != 107)
             return "Irregular SMF.";
         p += 4;
-        var endPoint = p+4 + getInt(smf, p, p+4);
+        const endPoint = p + 4 + ParseUtil.getInt(smf, p, p+4);
         p += 4;
-        var tick = 0;
-        var tempo = 120;
-        var tempoCurTick = 0;
-        var tempoCurTime = 0;
-        var lastState = 1;
-        while(p<endPoint){
+        let tick = 0;
+        let tempo = 120;
+        let tempoCurTick = 0;
+        let tempoCurTime = 0;
+        let lastState = 1;
+        let dt;
+        while (p<endPoint) {
             // DeltaTime
-            if(lastState!=null){
-                var lengthAry = variableLengthToInt(smf, p, p+5);
-                var dt = lengthAry[0];
+            if (lastState != null) {
+                let lengthAry = ParseUtil.variableLengthToInt(smf, p, p+5);
+                dt = lengthAry[0];
                 tick += dt;
                 p += lengthAry[1];
             }
-            // WebMIDIAPI
-            if(this.settings.isWebMIDI){
-                var cashP = p;
-                var time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
-            }
+            let cashP = p; // WebMIDI用
             // Events
-            switch(Math.floor(smf[p]/0x10)){
+            const mes0 = smf[p] >> 4; // Math.floor(smf[p] / 0x10)
+            switch (mes0) {
                 case 0x8: // Note OFF - 8[ch], Pitch, Velocity
                 case 0x9: // Note ON - 9[ch], Pitch, Velocity
                 case 0xA: // Polyfonic Key Pressure - A[ch], Pitch?, Velocity?
                 case 0xB: // Control Change - B[ch],,
                 case 0xE: // PitchBend Change - E[ch],,
+                {
                     // チャンネル毎に仕分けた後に解析する
                     lastState = smf[p];
-                    var ch = channels[lastState&0x0F];
-                    chIndicesSplice.call(this, ch, tick, p, 3); // デルタタイムの順番になるようにリスト配列に挿入
-                    p+=3;
+                    const ch = channels[lastState&0x0F];
+                    chIndicesSplice(this, ch, tick, p, 3); // デルタタイムの順番になるようにリスト配列に挿入
+                    p += 3;
                     break;
+                }
                 case 0xC: // Program Change - C[ch],
                 case 0xD: // Channel Pre - D[ch],
+                {
                     // チャンネル毎に仕分けた後に解析する
                     lastState = smf[p];
-                    var ch = channels[lastState&0x0F];
-                    chIndicesSplice.call(this, ch, tick, p, 2); // デルタタイムの順番になるようにリスト配列に挿入
-                    p+=2;
+                    const ch = channels[lastState&0x0F];
+                    chIndicesSplice(this, ch, tick, p, 2); // デルタタイムの順番になるようにリスト配列に挿入
+                    p += 2;
                     break;
+                }
                 // SysEx Events or Meta Events - F[ch], ...
-                case 0xF:{
-                    //lastState = smf[p]; <- ランニングナントカは無いらしい
-                    switch(smf[p]){
+                case 0xF: {
+                    //lastState = smf[p]; <- ランニングステートは無い
+                    switch (smf[p]) {
                         case 0xF0:
-                        case 0xF7:
+                        case 0xF7: {
                             // SysEx Events
-                            var lengthAry = variableLengthToInt(smf, p+1, p+1+4);
+                            const lengthAry = ParseUtil.variableLengthToInt(smf, p+1, p+1+4);
 
                             // Master Volume
                             // 0xF0, size, 0x7f, 0x7f, 0x04, 0x01, 0xNN, volume, 0xF7
-                            if(lengthAry[0]>=7 && smf[p+2]==0x7f && smf[p+3]==0x7f && smf[p+4]==0x04 && smf[p+5]==0x01){
+                            if (lengthAry[0] >= 7
+                                && smf[p+2] == 0x7f
+                                && smf[p+3] == 0x7f
+                                && smf[p+4] == 0x04
+                                && smf[p+5] == 0x01) {
                                 // 全チャンネルにMasterVolumeメッセージを挿入する
-                                for(var i=0; i<16; i++) {
-                                    var ch = channels[i];
-                                    chIndicesSplice.call(this, ch, tick, p, lengthAry[0]); // デルタタイムの順番になるように配列に挿入
+                                for (let i=0; i<16; i++) {
+                                    const ch = channels[i];
+                                    chIndicesSplice(this, ch, tick, p, lengthAry[0]); // デルタタイムの順番になるように配列に挿入
                                 }
                             }
 
-                            p+=1+lengthAry[1]+lengthAry[0];
+                            p += 1 + lengthAry[1] + lengthAry[0];
                             break;
+                        }
                         case 0xF1:
-                            p+=2;
+                            p += 2;
                             break;
                         case 0xF2:
-                            p+=3;
+                            p += 3;
                             break;
                         case 0xF3:
-                            p+=2;
+                            p += 2;
                             break;
                         case 0xF6:
                         case 0xF8:
@@ -126,11 +149,11 @@ export default function parseSMF(_smf) {
                         case 0xFB:
                         case 0xFC:
                         case 0xFE:
-                            p+=1;
+                            p += 1;
                             break;
-                        case 0xFF:{
+                        case 0xFF: {
                             // Meta Events
-                            switch(smf[p+1]){
+                            switch (smf[p+1]) {
                                 case 0x00:
                                 case 0x01:
                                 case 0x02:
@@ -144,12 +167,11 @@ export default function parseSMF(_smf) {
                                 case 0x2F:
                                     tick += (this.settings.isSkipEnding ? 0 : header.resolution) - dt;
                                     break;
-                                // Tempo
-                                case 0x51:
+                                case 0x51: // Tempo
                                     // 全チャンネルにTempoメッセージを挿入する
-                                    for(var i=0; i<16; i++) {
-                                        var ch = channels[i];
-                                        chIndicesSplice.call(this, ch, tick, p, 6); // デルタタイムの順番になるように配列に挿入
+                                    for (let i=0; i<16; i++) {
+                                        const ch = channels[i];
+                                        chIndicesSplice(this, ch, tick, p, 6); // デルタタイムの順番になるように配列に挿入
                                     }
                                     tempoCurTime += (60 / tempo / header.resolution) * (tick - tempoCurTick);
                                     tempoCurTick = tick;
@@ -162,8 +184,7 @@ export default function parseSMF(_smf) {
                                     break;
                                 case 0x54:
                                     break;
-                                // Beat
-                                case 0x58:
+                                case 0x58: // Beat
                                     beatTrack.push({
                                         timing: tick,
                                         value: [smf[p+3], Math.pow(2, smf[p+4])]
@@ -173,31 +194,32 @@ export default function parseSMF(_smf) {
                                 case 0x7F:
                                     break;
                             }
-                            var lengthAry = variableLengthToInt(smf, p+2, p+2+4);
-                            p+=2+lengthAry[1]+lengthAry[0];
+                            const lengthAry = ParseUtil.variableLengthToInt(smf, p+2, p+2+4);
+                            p += 2 + lengthAry[1] + lengthAry[0];
                             break;
                         }
                     }
                     break;
                 }
                 default: {
-                    if(lastState == null)
-                        return "Irregular SMF.";
+                    if (lastState == null)
+                        return "Irregular SMF. (" + p + " byte addr)";
                     p--;
                     smf[p] = lastState; // 上書き
                     lastState = null;
                 }
             }
             // WebMIDIAPI
-            if(this.settings.isWebMIDI){
-                if(lastState!=null){
-                    chIndicesSplice.call(this, channels[16], tick, cashP, p-cashP);
+            if (this.settings.isWebMIDI) {
+                if (lastState != null) {
+                    // WebMIDI用に17chに全てのMIDIメッセージを入れる
+                    chIndicesSplice(this, channels[16], tick, cashP, p - cashP);
                 }
             }
         }
-        if(!this.settings.isSkipEnding && songLength<tick) songLength = tick;
+        if (!this.settings.isSkipEnding && songLength<tick) songLength = tick;
         // リスト配列のポインタを初期化
-        for(var i=0; i<channels.length; i++){
+        for (let i=0; i<channels.length; i++) {
             channels[i].indicesCur = channels[i].indicesHead;
             channels[i].indicesPre = channels[i].indicesHead;
         }
@@ -206,71 +228,50 @@ export default function parseSMF(_smf) {
     if (this.debug) {
         var syoriTimeS2 = performance.now();
     }
+
+    // SMFの本解析 //
+    let tempo;
+    let tempoCurTick;
+    let tempoCurTime;
     // Midi Events (0x8n - 0xEn) parse
-    for(var ch=0; ch<16; ch++){
-        var channel = channels[ch];
-        var dataEntry = 2;
-        var pitchBend = 0;
-        var pan = 64;
-        var expression = 127;
-        var velocity = 100;
-        var modulation = 0;
-        var hold = 0;
-        var reverb = this.isTonyu2 ? 0 : 10;
-        var chorus = 0;
-        var nrpnLsb = 127;
-        var nrpnMsb = 127;
-        var rpnLsb = 127;
-        var rpnMsb = 127;
-        var instrument = 0;
-        var masterVolume = 127;
-        var tempo = 120;
-        var tempoCurTick = 0;
-        var tempoCurTime = 0;
-        var nowNoteOnIdxAry = [];
-        var indIdx = channel.indicesHead;
-        var indices = channel.indices;
-        var nextNoteOnAry = new Array(128);
-        while(indIdx!=-1){
-            var tick = indices[indIdx];
-            var p = indices[indIdx+2];
-            var nextIdx = indices[indIdx+3];
-            var time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
+    for (let ch=0; ch<16; ch++) {
+        const channel = channels[ch];
+        let dataEntry = 2;
+        let pitchBend = 0;
+        let pan = 64;
+        let expression = 127;
+        let velocity = 100;
+        let modulation = 0;
+        let hold = 0;
+        let reverb = this.isTonyu2 ? 0 : 10;
+        let chorus = 0;
+        let nrpnLsb = 127;
+        let nrpnMsb = 127;
+        let rpnLsb = 127;
+        let rpnMsb = 127;
+        let instrument = 0;
+        let masterVolume = 127;
+        tempo = 120;
+        tempoCurTick = 0;
+        tempoCurTime = 0;
+        const nowNoteOnIdxAry = [];
+        let indIdx = channel.indicesHead;
+        const indices = channel.indices;
+        const nextNoteOnAry = new Array(128);
+        while (indIdx != -1) {
+            const tick = indices[indIdx];
+            const p = indices[indIdx+2];
+            const nextIdx = indices[indIdx+3];
+            const time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
+
             // Events
-            switch(Math.floor(smf[p]/0x10)){
-                // Note OFF - 8[ch], Pitch, Velocity
-                case 0x8:
-                    nowNoteOnIdxAry.some(function(idx,i){
-                        var note = channel.notes[idx];
-                        if(note.pitch==smf[p+1] && note.stop==null){
-                            if(hold>=that.settings.holdOnValue){
-                                if (note.holdBeforeStop==null){
-                                    note.holdBeforeStop = [{
-                                        timing: tick,
-                                        time: time,
-                                        value: hold
-                                    }];
-                                }
-                            } else {
-                                note.stop = tick;
-                                note.stopTime = time;
-                                // nowNoteOnIdxAry.splice(i, 1); を軽量化
-                                if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
-                                else if(i == 0) nowNoteOnIdxAry.shift();
-                                else nowNoteOnIdxAry.splice(i, 1);
-                            }
-                            if(tick > lastNoteOffTiming){
-                                lastNoteOffTiming = tick;
-                                lastNoteOffTime = time;
-                            }
-                            return true;
-                        }
-                    });
-                    break;
-                // Note ON - 9[ch], Pitch, Velocity
-                case 0x9:
-                    if(smf[p+2]!=0){that.settings.resolution = header.resolution;
-                        var note = {
+            const mes0 = smf[p] >> 4; // Math.floor(smf[p] / 0x10)
+            switch (mes0) {
+                case 0x8: // Note OFF - 8[ch], Pitch, Velocity
+                case 0x9: // Note ON - 9[ch], Pitch, Velocity
+                    if (mes0 == 0x9 && smf[p+2] != 0) { // ノートオン
+                        // ノート情報が入ったオブジェクトを作成 //
+                        const note = {
                             start: tick,
                             stop: null,
                             startTime: time,
@@ -289,51 +290,56 @@ export default function parseSMF(_smf) {
                             nextSameNoteOnInterval: -1,
                             drumStopTime: 2 // 再生時に使う
                         };
-                        // 前回鳴っていた同音ノートに次のノートオン時間を入れる
-                        var prevNote = nextNoteOnAry[smf[p+1]];
-                        if(prevNote){
+
+                        // 前回鳴っていた同音ノートに次のノートオン時間を入れる //
+                        // 同音ノートを二重再生したくない場合のために記録する //
+                        const prevNote = nextNoteOnAry[smf[p+1]];
+                        if (prevNote) {
                             prevNote.nextSameNoteOnInterval = time - prevNote.startTime;
                         }
                         nextNoteOnAry[smf[p+1]] = note;
-                        // If this note is NoteOn, change to NoteOFF.
-                        nowNoteOnIdxAry.some(function(idx,i){
-                            var note = channel.notes[idx];
-                            if(note.pitch == smf[p+1] && note.stop==null){
+
+                        // 同音ノートがノートオン中の場合、ノートオフにする //
+                        nowNoteOnIdxAry.some((idx,i) => {
+                            const note = channel.notes[idx];
+                            if (note.pitch == smf[p+1] && note.stop==null) {
                                 note.stop = tick;
                                 note.stopTime = time;
-                                // nowNoteOnIdxAry.splice(i, 1); を軽量化
-                                if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
-                                else if(i == 0) nowNoteOnIdxAry.shift();
-                                else nowNoteOnIdxAry.splice(i, 1);
+                                arrayDelete(nowNoteOnIdxAry, i); // nowNoteOnIdxAry.splice(i, 1); を軽量化
                             }
                         });
+
+                        // ノートオン中配列に入れる
                         nowNoteOnIdxAry.push(channel.notes.length);
+                        // notes一覧にnoteオブジェクトを入れる
                         channel.notes.push(note);
-                        if(tick < firstNoteOnTiming){
+
+                        // 最初のノートオン時間を記録 //
+                        if (tick < firstNoteOnTiming) {
                             firstNoteOnTiming = tick;
                             firstNoteOnTime = time;
                         }
-                    } else {
-                        nowNoteOnIdxAry.some(function(idx,i){
-                            var note = channel.notes[idx];
-                            if(note.pitch==smf[p+1] && note.stop==null){
-                                if(hold>=that.settings.holdOnValue){
-                                    if (note.holdBeforeStop==null){
+                    } else { // ノートオフ
+                        // ノートオン中配列から該当ノートを探し、ノートオフ処理をする //
+                        nowNoteOnIdxAry.some((idx, i) => {
+                            const note = channel.notes[idx];
+                            if (note.pitch == smf[p+1] && note.stop == null) {
+                                if (hold >= this.settings.holdOnValue) { // ホールドが効いている場合
+                                    if (note.holdBeforeStop == null) {
                                         note.holdBeforeStop = [{
                                             timing: tick,
                                             time: time,
                                             value: hold
                                         }];
                                     }
-                                } else {
+                                } else { // ホールドしていない場合
                                     note.stop = tick;
                                     note.stopTime = time;
-                                    // nowNoteOnIdxAry.splice(i, 1); を軽量化
-                                    if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
-                                    else if(i == 0) nowNoteOnIdxAry.shift();
-                                    else nowNoteOnIdxAry.splice(i, 1);
+                                    arrayDelete(nowNoteOnIdxAry, i); // nowNoteOnIdxAry.splice(i, 1); を軽量化
                                 }
-                                if(tick > lastNoteOffTiming){
+
+                                // 最後のノートオフ時間を記録 //
+                                if (tick > lastNoteOffTiming) {
                                     lastNoteOffTiming = tick;
                                     lastNoteOffTime = time;
                                 }
@@ -347,11 +353,12 @@ export default function parseSMF(_smf) {
                     break;
                 // Control Change - B[ch],,
                 case 0xB:
-                    switch(smf[p+1]){
+                    switch (smf[p+1]) {
                         case 1:
+                            // modulation
                             modulation = smf[p+2];
-                            nowNoteOnIdxAry.forEach(function(idx){
-                                var note = channel.notes[idx];
+                            nowNoteOnIdxAry.forEach((idx) => {
+                                const note = channel.notes[idx];
                                 note.modulation.push({
                                     timing: tick,
                                     time: time,
@@ -360,32 +367,31 @@ export default function parseSMF(_smf) {
                             });
                             break;
                         case 6:
-                            if(rpnLsb==0 && rpnMsb==0){
+                            if (rpnLsb==0 && rpnMsb==0) {
                                 // RLSB=0 & RMSB=0 -> 6はピッチ
                                 dataEntry = smf[p+2];
-                                if(dataEntry > 24){
+                                if (dataEntry > 24) {
                                     dataEntry = 24;
                                 }
                             }
-                            if(nrpnLsb==8 && nrpnMsb==1){
+                            if (nrpnLsb==8 && nrpnMsb==1) {
                                 // (保留)ビブラート・レイト(GM2/GS/XG)
                                 //console.log("CC  8 1 6 "+smf[p+2]+" tick:"+tick);
-                            } else if(nrpnLsb==9 && nrpnMsb==1){
+                            } else if (nrpnLsb==9 && nrpnMsb==1) {
                                 // (保留)ビブラート・デプス(GM2/GS/XG)
                                 //console.log("CC  9 1 6 "+smf[p+2]+" tick:"+tick);
-                            } else if(nrpnLsb==10 && nrpnMsb==1){
+                            } else if (nrpnLsb==10 && nrpnMsb==1) {
                                 // (保留)ビブラート・ディレイ(GM2/GS/XG)
                                 //console.log("CC 10 1 6 "+smf[p+2]+" tick:"+tick);
                             }
                             break;
-                        case 7:
+                        case 7: 
                             velocity = smf[p+2];
                             break;
-                        case 10:
-                            //Pan
+                        case 10: // Pan
                             pan = smf[p+2];
-                            nowNoteOnIdxAry.forEach(function(idx){
-                                var note = channel.notes[idx];
+                            nowNoteOnIdxAry.forEach((idx) => {
+                                const note = channel.notes[idx];
                                 note.pan.push({
                                     timing: tick,
                                     time: time,
@@ -393,11 +399,10 @@ export default function parseSMF(_smf) {
                                 });
                             });
                             break;
-                        case 11:
-                            //Expression
+                        case 11: // Expression
                             expression = smf[p+2];
-                            nowNoteOnIdxAry.forEach(function(idx){
-                                var note = channel.notes[idx];
+                            nowNoteOnIdxAry.forEach((idx) => {
+                                const note = channel.notes[idx];
                                 note.expression.push({
                                     timing: tick,
                                     time: time,
@@ -405,28 +410,24 @@ export default function parseSMF(_smf) {
                                 });
                             });
                             break;
-                        case 64:
-                            //Hold1
+                        case 64: // Hold1
                             hold = smf[p+2];
-                            if(hold<this.settings.holdOnValue){
-                                for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
-                                    var idx = nowNoteOnIdxAry[i];
-                                    var note = channel.notes[idx];
-                                    if(note.stop==null && note.holdBeforeStop!=null){
+                            if (hold < this.settings.holdOnValue) {
+                                for (let i=nowNoteOnIdxAry.length-1; i>=0; i--) {
+                                    const idx = nowNoteOnIdxAry[i];
+                                    const note = channel.notes[idx];
+                                    if (note.stop == null && note.holdBeforeStop != null) {
                                         note.stop = tick;
                                         note.stopTime = time;
-                                        // nowNoteOnIdxAry.splice(i, 1); を軽量化
-                                        if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
-                                        else if(i == 0) nowNoteOnIdxAry.shift();
-                                        else nowNoteOnIdxAry.splice(i, 1);
+                                        arrayDelete(nowNoteOnIdxAry, i); // nowNoteOnIdxAry.splice(i, 1); を軽量化
                                     }
                                 }
                             }
                             break;
-                        case 91:
+                        case 91: // reverb
                             reverb = smf[p+2];
-                            nowNoteOnIdxAry.forEach(function(idx){
-                                var note = channel.notes[idx];
+                            nowNoteOnIdxAry.forEach((idx) => {
+                                const note = channel.notes[idx];
                                 note.reverb.push({
                                     timing: tick,
                                     time: time,
@@ -434,10 +435,10 @@ export default function parseSMF(_smf) {
                                 });
                             });
                             break;
-                        case 93:
+                        case 93: // chorus
                             chorus = smf[p+2];
-                            nowNoteOnIdxAry.forEach(function(idx){
-                                var note = channel.notes[idx];
+                            nowNoteOnIdxAry.forEach((idx) => {
+                                const note = channel.notes[idx];
                                 note.chorus.push({
                                     timing: tick,
                                     time: time,
@@ -457,8 +458,8 @@ export default function parseSMF(_smf) {
                         case 101:
                             rpnMsb = smf[p+2];
                             break;
-                        case 111: // RPGツクール用ループ
-                            if(cc111Tick == -1){
+                        case 111: // RPGツクール用ループ(CC111)
+                            if (cc111Tick == -1) {
                                 cc111Tick = tick;
                                 cc111Time = time;
                             }
@@ -475,8 +476,8 @@ export default function parseSMF(_smf) {
                 // PitchBend Change - E[ch],,
                 case 0xE:
                     pitchBend = ((smf[p+2]*128+smf[p+1])-8192)/8192*dataEntry;
-                    nowNoteOnIdxAry.forEach(function(idx){
-                        var note = channel.notes[idx];
+                    nowNoteOnIdxAry.forEach((idx) => {
+                        const note = channel.notes[idx];
                         note.pitchBend.push({
                             timing: tick,
                             time: time,
@@ -485,17 +486,17 @@ export default function parseSMF(_smf) {
                     });
                     break;
                 case 0xF:
-                    //lastState = smf[p]; <- ランニングナントカは無いらしい
-                    switch(smf[p]){
+                    //lastState = smf[p]; <- ランニングステートは無い
+                    switch (smf[p]) {
                         case 0xF0:
                         case 0xF7:
                             // Master Volume
-                            if(smf[p+1]==0x7f && smf[p+2]==0x7f && smf[p+3]==0x04 && smf[p+4]==0x01){
-                                var vol = smf[p+6];
-                                if(vol > 127) vol = 127;
+                            if (smf[p+1]==0x7f && smf[p+2]==0x7f && smf[p+3]==0x04 && smf[p+4]==0x01) {
+                                let vol = smf[p+6];
+                                if (vol > 127) vol = 127;
                                 masterVolume = vol;
-                                nowNoteOnIdxAry.forEach(function(idx){
-                                    var note = channel.notes[idx];
+                                nowNoteOnIdxAry.forEach((idx) => {
+                                    const note = channel.notes[idx];
                                     note.expression.push({
                                         timing: tick,
                                         time: time,
@@ -506,7 +507,7 @@ export default function parseSMF(_smf) {
                             break;
                         case 0xFF:
                             // Meta Events
-                            switch(smf[p+1]){
+                            switch (smf[p+1]) {
                                 case 0x51:
                                     // Tempo
                                     tempoCurTime += (60 / tempo / header.resolution) * (tick - tempoCurTick);
@@ -514,10 +515,11 @@ export default function parseSMF(_smf) {
                                     tempo = 60000000/(smf[p+3]*0x10000 + smf[p+4]*0x100 + smf[p+5]);
                                     break;
                             }
+                        break;
                     }
                     break;
                 default: {
-                    return "Error parseSMF.";
+                    return "Error parseSMF. ";
                 }
             }
             indIdx = nextIdx;
@@ -528,58 +530,54 @@ export default function parseSMF(_smf) {
         }
     }
 
-    // hold note off
-    for(var ch=0; ch<16; ch++){
-        var channel = channels[ch];
-        var nowNoteOnIdxAry = channels[ch].nowNoteOnIdxAry;
-        for(var i=nowNoteOnIdxAry.length-1; i>=0; i--){
-            var note = channel.notes[nowNoteOnIdxAry[i]];
-            if(note.stop==null){
+    // ホールドが効いてノートオンのままになったノートをノートオフする //
+    for (let ch=0; ch<16; ch++) {
+        const channel = channels[ch];
+        const nowNoteOnIdxAry = channel.nowNoteOnIdxAry;
+        for (let i=nowNoteOnIdxAry.length-1; i>=0; i--) {
+            const note = channel.notes[nowNoteOnIdxAry[i]];
+            if (note.stop==null) {
                 note.stop = lastNoteOffTiming;
                 note.stopTime = lastNoteOffTime;
                 // If (note.cc[x].timing > lastNoteOffTiming), delete note.cc[x]
-                var nameAry = ["pitchBend", "pan", "expression", "modulation", "reverb", "chorus"];
-                nameAry.forEach(function(name){
-                    var ccAry = note[name]
-                    for(var i2=ccAry.length-1; i2>=1; i2--){
-                        var obj = ccAry[i2];
-                        if(obj.timing>lastNoteOffTiming){
-                            // ccAry.splice(i2, 1); を軽量化
-                            if(i2 == ccAry.length-1) ccAry.pop();
-                            else if(i2 == 0) ccAry.shift();
-                            else ccAry.splice(i2, 1);
+                const nameAry = ["pitchBend", "pan", "expression", "modulation", "reverb", "chorus"];
+                nameAry.forEach((name) => {
+                    const ccAry = note[name]
+                    for (let i2=ccAry.length-1; i2>=1; i2--) {
+                        const obj = ccAry[i2];
+                        if (obj.timing>lastNoteOffTiming) {
+                            arrayDelete(ccAry, i2); // ccAry.splice(i2, 1); を軽量化
                         }
                     }
                 });
-                // nowNoteOnIdxAry.splice(i, 1); を軽量化
-                if(i == nowNoteOnIdxAry.length-1) nowNoteOnIdxAry.pop();
-                else if(i == 0) nowNoteOnIdxAry.shift();
-                else nowNoteOnIdxAry.splice(i, 1);
+                arrayDelete(nowNoteOnIdxAry, i); // nowNoteOnIdxAry.splice(i, 1); を軽量化
             }
         }
         delete channel.nowNoteOnIdxAry;
     }
-    if(this.settings.isSkipEnding) songLength = lastNoteOffTiming;
+    if (this.settings.isSkipEnding) songLength = lastNoteOffTiming;
     tempoTrack.push({ timing:songLength, time:(60 / tempo / header.resolution) * (songLength - tempoCurTick) + tempoCurTime, value:120 });
 
-    if(this.settings.isWebMIDI){
-        var channel = channels[16];
-        var tempo = 120;
-        var tempoCurTick = 0;
-        var tempoCurTime = 0;
-        var indIdx = channel.indicesHead;
-        var indices = channel.indices;
-        while(indIdx!=-1){
-            var tick = indices[indIdx];
-            var pLen = indices[indIdx+1];
-            var p = indices[indIdx+2];
-            var nextIdx = indices[indIdx+3];
-            var time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
+    // WebMIDI用のMIDIメッセージを作成 //
+    const messages = [];
+    if (this.settings.isWebMIDI) {
+        const channel = channels[16];
+        let tempo = 120;
+        let tempoCurTick = 0;
+        let tempoCurTime = 0;
+        let indIdx = channel.indicesHead;
+        const indices = channel.indices;
+        while (indIdx != -1) {
+            const tick = indices[indIdx];
+            const pLen = indices[indIdx+1];
+            const p = indices[indIdx+2];
+            const nextIdx = indices[indIdx+3];
+            const time = (60 / tempo / header.resolution) * (tick - tempoCurTick) + tempoCurTime;
             // Events
-            switch(smf[p]){
+            switch (smf[p]) {
                 case 0xFF:
                 // Meta Events
-                switch(smf[p+1]){
+                switch (smf[p+1]) {
                     case 0x51:
                         // Tempo
                         tempoCurTime += (60 / tempo / header.resolution) * (tick - tempoCurTick);
@@ -593,6 +591,7 @@ export default function parseSMF(_smf) {
         }
     }
 
+    // return用のオブジェクトに情報を代入 //
     data.header = header;
     data.tempoTrack = tempoTrack;
     data.beatTrack = beatTrack;
@@ -604,13 +603,13 @@ export default function parseSMF(_smf) {
     data.firstNoteOnTime = firstNoteOnTime;
     data.lastNoteOffTiming = lastNoteOffTiming;
     data.lastNoteOffTime = lastNoteOffTime;
-    if(this.settings.isWebMIDI){
+    if (this.settings.isWebMIDI) {
         data.messages = messages;
         data.smfData = new Uint8Array(smf); // lastStateを上書きしたsmfをコピー
     }
 
     if (this.debug) {
-        var syoriTimeE = performance.now();
+        const syoriTimeE = performance.now();
         console.log("parseSMF time", syoriTimeE - syoriTimeS);
         console.log("parseSMF(0/2) time", syoriTimeS1_1 - syoriTimeS);
         console.log("parseSMF(1/2) time", syoriTimeS2 - syoriTimeS);
@@ -620,48 +619,38 @@ export default function parseSMF(_smf) {
     return data;
 };
 
-function getInt(arr, s, e) {
-    var value = 0;
-    for (var i=s; i<e; i++){
-        value = (value << 8) + arr[i];
-    }
-    return value;
-}
 
-function variableLengthToInt(arr, s, e) {
-    var i = s;
-    var value = 0;
-    while(i<e-1 && arr[i]>=0x80){
-        if (i < s+4) value = (value<<7) + (arr[i]-0x80);
-        i++;
-    }
-    value = (value<<7) + arr[i];
-    i++;
-    return [value, i-s];
-}
 
-function chIndicesSplice(ch, time, p, len) {
-    var indices = ch.indices;
+/**
+ * デルタタイムの順番になるように配列に挿入
+ * @param {PicoAudio} that PicoAudioインスタンス
+ * @param {number} ch チャンネル番号
+ * @param {number} time デルタタイム
+ * @param {number} p 対象のMIDIメッセージの場所(SMFデータ内の位置)
+ * @param {number} len MIDIメッセージの長さ
+ */
+function chIndicesSplice(that, ch, time, p, len) {
+    let indices = ch.indices;
     // メモリー足りなくなったら拡張
-    if(indices.length <= ch.indicesLength+4){
-        if(this.debug){
+    if (indices.length <= ch.indicesLength+4) {
+        if (that.debug) {
             var ts1 = performance.now();
         }
-        var temp = new Int32Array(Math.floor(indices.length*2));
-        for(var i=indices.length-1; i>=0; i--){
+        let temp = new Int32Array(Math.floor(indices.length*2));
+        for (let i=indices.length-1; i>=0; i--) {
             temp[i] = indices[i];
         }
         ch.indices = indices = temp;
-        if(this.debug){
+        if (that.debug) {
             console.log("malloc", performance.now() - ts1, temp.length);
         }
     }
     // デルタタイムの順番になるようにリスト配列に挿入
-    if(ch.indicesLength>=4 && time<indices[ch.indicesFoot]){
+    if (ch.indicesLength >= 4 && time < indices[ch.indicesFoot]) {
         // Insert
-        while(ch.indicesCur != -1){
-            if(time<indices[ch.indicesCur]){
-                if(ch.indicesCur==ch.indicesHead){
+        while (ch.indicesCur != -1) {
+            if (time<indices[ch.indicesCur]) {
+                if (ch.indicesCur == ch.indicesHead) {
                     ch.indicesHead = ch.indicesLength;
                 } else {
                     indices[ch.indicesPre+3] = ch.indicesLength;
@@ -679,7 +668,7 @@ function chIndicesSplice(ch, time, p, len) {
         }
     } else {
         // Push
-        if(ch.indicesLength>=4){
+        if (ch.indicesLength >= 4) {
             indices[ch.indicesFoot+3] = ch.indicesLength;
         } else {
             ch.indicesHead = 0;
