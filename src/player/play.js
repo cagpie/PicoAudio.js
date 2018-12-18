@@ -111,6 +111,7 @@ let cnt;
  * 再生中、1ms毎に呼ばれるコールバック
  * （ブラウザの制限で実際は最短4ms毎に呼ばれる）
  * @param {number} updatePreTime 前回の時間
+ * @returns {number} 現在の時間
  */
 function updateNote(updatePreTime) {
     const context = this.context;
@@ -147,20 +148,28 @@ function updateNote(updatePreTime) {
 
     // ノートを先読み度合いを自動調整（予約しすぎると重くなる） //
     states.updateIntervalTime = updateBufTime;
-    if (states.updateBufTime < updateBufTime) {
+    if (states.updateBufTime < updateBufTime) { // 先読み遅れている場合
         states.updateBufTime = updateBufTime;
-    } else { // 先読み量を少しずつ減らす
-        states.updateBufTime -= states.updateBufTime*0.001;
+    } else { // 先読み量に余裕がある場合
+        // 先読み量を少しずつ減らす //
+        if (states.updateBufTime > 50) {
+            states.updateBufTime -= states.updateBufTime*0.001;
+        }
         if (states.updateBufTime > 100) {
             states.updateBufTime -= states.updateBufTime*0.01;
         }
         if (states.updateBufMaxTime > 150) {
             states.updateBufMaxTime -= states.updateBufMaxTime*0.002;
         }
-        if (states.updateBufMaxTime > 10 && states.updateBufMaxTime < 140) {
+        // 先読み量を少しずつ増やす //
+        if (states.updateBufTime < 50) {
+            states.updateBufTime += states.updateBufTime*0.002;
+        }
+        if (states.updateBufMaxTime >= 10 && states.updateBufMaxTime < 140) {
             states.updateBufMaxTime += states.updateBufMaxTime*0.003;
         }
     }
+    // 先読み量が足りなくなった場合
     if (states.updateBufTime > states.updateBufMaxTime) {
         if (updateBufTime >= 900 && states.latencyLimitTime <= 150) {
             // バックグラウンドっぽくて重くない場合、バックグラウンド再生
@@ -168,6 +177,8 @@ function updateNote(updatePreTime) {
         } else { // 通常
             const tempTime = updateBufTime - states.updateBufMaxTime;
             states.updateBufTime = states.updateBufMaxTime;
+            
+            // 先読み量が小さい場合大きくする
             if (states.updateBufMaxTime < 10) {
                 states.updateBufTime = states.updateBufMaxTime;
                 states.updateBufMaxTime *= 1.25;
@@ -206,7 +217,7 @@ function updateNote(updatePreTime) {
             // 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
             if (curTime < note.startTime - states.updateBufTime/1000) break;
 
-            // PicoAudioの音源で再生中の場合 //
+            // PicoAudio音源の再生処理 //
             if (!settings.isWebMIDI) { 
                 // 予約ノート数が急激に増えそうな時、先読み量を小さくしておく //
                 if (states.stopFuncs.length >= 350 && states.updateBufTime < 1000) {
@@ -258,7 +269,7 @@ function updateNote(updatePreTime) {
     // noteOffの時間になったか監視 //
     checkNoteOff(this);
 
-    // WebMIDIで再生中の場合 //
+    // WebMIDIの再生処理 //
     if (settings.isWebMIDI && settings.WebMIDIPortOutput != null) {
         const messages = this.playData.messages;
         const smfData = this.playData.smfData;

@@ -81,9 +81,11 @@ export default function createNote(option) {
         case 32: case 36: case 37: case 46: case 47:
         {
             gainNode.gain.value *= 1.1;
+            const decay = (128-option.pitch)/128;
             gainNode.gain.setValueAtTime(gainNode.gain.value, note.start);
-            let decay = (128-option.pitch)/64;
-            gainNode.gain.setTargetAtTime(0, note.start, 2.5*decay*decay);
+            gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.85, note.start+decay*decay/8);
+            gainNode.gain.linearRampToValueAtTime(gainNode.gain.value*0.8, note.start+decay*decay/4);
+            gainNode.gain.setTargetAtTime(0, note.start+decay*decay/4, 5*decay*decay);
             this.stopAudioNode(oscillator, note.stop, stopGainNode, isNoiseCut);
             break;
         }

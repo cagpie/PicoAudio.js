@@ -1,6 +1,6 @@
 /**
  * time(秒)からtickを求める
- * @param {number} time 
+ * @param {number} time
  * @returns {number} tick
  */
 export default function getTiming(time) {
