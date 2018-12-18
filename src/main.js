@@ -25,79 +25,155 @@ import parseSMF from './smf/parse-smf.js';
 
 import startWebMIDI from './web-midi/start-web-midi.js'
 
+/**
+ * MIDIをブラウザで再生するためのライブラリ
+ */
 class PicoAudio {
-    constructor(_audioContext, _picoAudio) {
-        picoAudioConstructor.call(this, _audioContext, _picoAudio);
+    /**
+     * PicoAudioクラスのコンストラクタ
+     * @param {AudioContext} audioContext 
+     * @param {PicoAudio} picoAudio 
+     */
+    constructor(audioContext, picoAudio) {
+        picoAudioConstructor.call(this, audioContext, picoAudio);
     }
-    // 初期化
-    init(_audioContext, _picoAudio) {
-        return init.call(this, _audioContext, _picoAudio);
+
+    /**
+     * 初期化・準備
+     * @param {AudioContext} audioContext 
+     * @param {PicoAudio} picoAudio 
+     */
+    init(audioContext, picoAudio) {
+        return init.call(this, audioContext, picoAudio);
     }
-    // SMF解析
-    parseSMF(_smf) {
-        return parseSMF.call(this, _smf);
+    
+    /**
+     * MIDIファイル(SMF)を解析する
+     * @param {Uint8Array} smf MIDIファイルの内容が入ったUint8Arrayオブジェクト
+     * @returns {Object} 再生用の情報が入ったオブジェクト
+     */
+    parseSMF(smf) {
+        return parseSMF.call(this, smf);
     }
-    // 再生データをセット
+
+    /**
+     * 再生用のデータをセットする
+     * @param {Object} data PicoAudio.parseSMF()で返されたオブジェクト
+     */
     setData(data) {
         return setData.call(this, data);
     }
-    // 再生
-    play(isSongLooping) {
-        return play.call(this, isSongLooping);
+
+    /**
+     * 再生
+     * @param {boolean} _isSongLooping PicoAudio内部で使う引数
+     */
+    play(_isSongLooping) {
+        return play.call(this, _isSongLooping);
     }
-    // 停止
-    stop(isSongLooping) {
-        return stop.call(this, isSongLooping);
+
+    /**
+     * 停止
+     * @param {boolean} _isSongLooping PicoAudio内部で使う引数
+     */
+    stop(_isSongLooping) {
+        return stop.call(this, _isSongLooping);
     }
-    // リセット
-    initStatus(isSongLooping, isLight) {
-        return initStatus.call(this, isSongLooping, isLight);
+
+    /**
+     * リセット
+     * @param {boolean} _isSongLooping PicoAudio内部で使う引数
+     * @param {boolean} _isLight PicoAudio内部で使う引数
+     */
+    initStatus(_isSongLooping, _isLight) {
+        return initStatus.call(this, _isSongLooping, _isLight);
     }
 
     // 時関関係 //
-    // tickからtime(秒)を求める
+    /**
+     * tickからtime(秒)を求める
+     * @param {number} tick
+     * @returns {number} time(秒)
+     */
     getTime(tick) {
         return getTime.call(this, tick);
     }
-    // time(秒)からtickを求める
+    /**
+     * time(秒)からtickを求める
+     * @param {number} time
+     * @returns {number} tick
+     */
     getTiming(time) {
         return getTiming.call(this, time);
     }
 
     // 再生・音源関係 //
-    // 再生処理(Web Audio API の oscillator等で音を鳴らす)
+    /**
+     * 再生処理（Web Audio API の oscillator等で音を鳴らす）
+     * @param {Object} option 
+     * @param {boolean} isDrum 
+     * @param {boolean} isExpression 
+     * @param {boolean} nonChannel 
+     * @param {boolean} nonStop 
+     * @returns {Object} AudioNodeやパラメータを返す
+     */
     createBaseNote(option, isDrum, isExpression, nonChannel, nonStop) {
         return createBaseNote.call(this, option, isDrum, isExpression, nonChannel, nonStop);
     }
-    // 音源(パーカッション以外)
+    /**
+     * 音源（パーカッション以外）
+     * @param {Object} option 
+     * @returns {Object} 音をストップさせる関数を返す
+     */
     createNote(option) {
         return createNote.call(this, option);
     }
-    // パーカッション音源
+    /**
+     * パーカッション音源
+     * @param {Object} option 
+     * @returns {Object} 音をストップさせる関数を返す
+     */
     createPercussionNote(option) {
         return createPercussionNote.call(this, option);
     }
 
     // 停止管理関係 //
-    // 各々のNoteの音停止処理
+    /**
+     * 各々のNoteの音停止処理
+     * @param {Object} tar 
+     * @param {number} time 
+     * @param {Object} stopGainNode 
+     * @param {boolean} isNoiseCut 
+     */
     stopAudioNode(tar, time, stopGainNode, isNoiseCut) {
         return stopAudioNode.call(this, tar, time, stopGainNode, isNoiseCut);
     }
-    // stop()するときに実行するコールバック等を登録
+    /**
+     * stop()するときに実行するコールバック等を登録
+     * @param {Object} tar 
+     */
     pushFunc(tar) {
         return pushFunc.call(this, tar);
     }
-    // pushFunc()で予約したコールバック等を削除する
+    /**
+     * pushFunc()で予約したコールバック等を削除する
+     * @param {Object} tar1 
+     * @param {Object} tar2 
+     */
     clearFunc(tar1, tar2) {
         return clearFunc.call(this, tar1, tar2);
     }
 
-    // Web MIDI API
+    /**
+     * Web MIDI API
+     */
     startWebMIDI() {
         return startWebMIDI.call(this);
     }
 
-    // パフォーマンス計測
+    /**
+     * パフォーマンス計測
+     */
     measurePerformanceReverb() {
         return measurePerformanceReverb.call(this);
     }
