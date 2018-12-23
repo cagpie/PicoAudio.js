@@ -38,8 +38,8 @@ export default class ParseUtil {
      * @param {PicoAudio} that PicoAudioインスタンス
      * @param {number} ch チャンネル番号
      * @param {number} time デルタタイム
-     * @param {number} p 対象のMIDIメッセージの場所(SMFデータ内の位置)
-     * @param {number} len MIDIメッセージの長さ
+     * @param {number} p 対象のMIDIイベントの場所(SMFデータ内の位置)
+     * @param {number} len MIDIイベントの長さ
      */
     static chIndicesInsert(that, ch, time, p, len) {
         let indices = ch.indices;

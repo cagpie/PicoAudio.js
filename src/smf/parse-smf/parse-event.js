@@ -1,13 +1,13 @@
 import ArrayUtil from '../../util/array-util.js';
 
-export default function parseMessage(info) {
+export default function parseEvent(info) {
     // 関数呼び出し元からデータをもらう //
     const smf = info.smf;
     const header = info.header;
     const channels = info.channels;
     const tempoTrack = info.tempoTrack;
 
-    // SMFのMIDIメッセージ解析 //
+    // SMFのMIDIイベント解析 //
     let tempo;
     let tempoCurTick;
     let tempoCurTime; 

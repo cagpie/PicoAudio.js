@@ -10,15 +10,15 @@ export default function parseTrack(info) {
     // SMFのトラックチャンクの解析・"SMF読み込み順序配列"を作成 //
     //   全トラックを解析しながら、SMFを読む順番を記録した配列を作成する
     //   読み込む順番は、この解析でデルタタイム順になるようソートしておく
-    //   SMFのメッセージ解析時は、上記配列から「次はMIDIファイルの何バイト目を見るか」を取得して解析する
+    //   SMFのMIDIイベント解析時は、上記配列から「次はMIDIファイルの何バイト目を見るか」を取得して解析する
     //   上記配列はリスト構造の配列のように使う（リスト構造にすることで配列のinsert処理を高速化する）
     // 
     // ■配列イメージ（json風）■
     // [
     //     {
-    //         tick : このMIDIメッセージのTick,
-    //         smfMesLength : １つのMIDIメッセージの長さ,
-    //         smfPtr : このMIDIメッセージはMIDIファイルの何バイト目にあるか,
+    //         tick : このMIDIイベントのTick,
+    //         smfMesLength : １つのMIDIイベントの長さ,
+    //         smfPtr : このMIDIイベントはMIDIファイルの何バイト目にあるか,
     //         nextIndicesPtr : 次のオブジェクトはリスト配列の何番目にあるか
     //     },
     //     ...
@@ -93,7 +93,7 @@ export default function parseTrack(info) {
                                 && smf[p+3] == 0x7f
                                 && smf[p+4] == 0x04
                                 && smf[p+5] == 0x01) {
-                                // 全チャンネルにMasterVolumeメッセージを挿入する
+                                // 全チャンネルにMasterVolumeイベントを挿入する
                                 for (let i=0; i<16; i++) {
                                     const ch = channels[i];
                                     ParseUtil.chIndicesInsert(this, ch, tick, p, lengthAry[0]);
@@ -137,7 +137,7 @@ export default function parseTrack(info) {
                                     tick += (this.settings.isSkipEnding ? 0 : header.resolution) - dt;
                                     break;
                                 case 0x51: // Tempo
-                                    // 全チャンネルにTempoメッセージを挿入する
+                                    // 全チャンネルにTempoイベントを挿入する
                                     for (let i=0; i<16; i++) {
                                         const ch = channels[i];
                                         ParseUtil.chIndicesInsert(this, ch, tick, p, 6);
@@ -181,7 +181,7 @@ export default function parseTrack(info) {
             // WebMIDIAPI
             if (this.settings.isWebMIDI) {
                 if (lastState != null) {
-                    // WebMIDI用に17chに全てのMIDIメッセージを入れる
+                    // WebMIDI用に17chに全てのMIDIイベントを入れる
                     ParseUtil.chIndicesInsert(this, channels[16], tick, cashP, p - cashP);
                 }
             }

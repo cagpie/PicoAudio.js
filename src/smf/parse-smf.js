@@ -1,6 +1,6 @@
 import parseHeader from './parse-smf/parse-header.js';
 import parseTrack from './parse-smf/parse-track.js';
-import parseMessage from './parse-smf/parse-message.js';
+import parseEvent from './parse-smf/parse-event.js';
 
 export default function parseSMF(_smf) {
     if (this.debug) {
@@ -32,8 +32,8 @@ export default function parseSMF(_smf) {
         var syoriTimeS3 = performance.now();
     }
 
-    // MIDIメッセージ解析 //
-    parseMessage.call(this, info);
+    // MIDIイベント解析 //
+    parseEvent.call(this, info);
 
     // return用のオブジェクトに情報を代入 //
     const data = {};

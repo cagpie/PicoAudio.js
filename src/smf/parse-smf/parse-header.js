@@ -16,7 +16,7 @@ export default function parseHeader(info) {
 
     // 変数を用意 //
     const channels = [];
-    const chSize = this.settings.isWebMIDI ? 17 : 16; // WebMIDI用に17chに全てのメッセージを入れるため17ch分作る
+    const chSize = this.settings.isWebMIDI ? 17 : 16; // WebMIDI用に17chに全てのイベントを入れるため17ch分作る
     for (let i=0; i<chSize; i++) {
         const channel = {};
         channels.push(channel);
