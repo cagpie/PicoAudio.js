@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "setup": "npm install",
-    "build": "webpack",
+    "build": "webpack --mode production && webpack --mode development",
+    "develop": "webpack --mode development",
     "start-server": "webpack-dev-server",
     "watch": "webpack --watch"
   },
