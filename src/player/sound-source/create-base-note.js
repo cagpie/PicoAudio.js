@@ -64,7 +64,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
 
     // パンの初期値を設定 //
     const panValue = option.pan && option.pan[0].value != 64 ? (option.pan[0].value / 127) * 2 - 1 : 0;
-    initPanValue(panNode, panValue);
+    initPanValue(context, panNode, panValue);
 
     // パンの変動を設定 //
     if (context.createStereoPanner || context.createPanner) {
@@ -94,8 +94,8 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                         firstPan = false;
                         return;
                     }
-                    let v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
-                    let posObj = convPosition(v);
+                    const v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
+                    const posObj = convPosition(v);
                     panNode.positionX.setValueAtTime(posObj.x, p.time + songStartTime);
                     panNode.positionY.setValueAtTime(posObj.y, p.time + songStartTime);
                     panNode.positionZ.setValueAtTime(posObj.z, p.time + songStartTime);
@@ -108,7 +108,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                         firstNode = false;
                         return;
                     }
-                    let reservePan = setTimeout(() => {
+                    const reservePan = setTimeout(() => {
                         this.clearFunc("pan", reservePan);
                         let v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
                         if (v > 1.0) v = 1.0;
@@ -244,18 +244,15 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
  * @param {PannerNode | StereoPannerNode} panNode 
  * @param {number} panValue 
  */
-function initPanValue(panNode, panValue) {
-    if (panValue > 1.0) panValue = 1.0;
-
-    if (panNode instanceof PannerNode) {
-        // PannerNode が使える場合
-        // iOS, Old Browser
-        panNode.panningModel = "equalpower";
-        const posObj = convPosition(panValue);
-        panNode.setPosition(posObj.x, posObj.y, posObj.z);
-    } else if (panNode instanceof StereoPannerNode) {
-        // StereoPannerNode が使える場合
+function initPanValue(context, panNode, panValue) {
+    if (context.createStereoPanner) {
+        if(panValue > 1.0) panValue = 1.0;
         panNode.pan.value = panValue;
+    } else if(context.createPanner) {
+        // iOS, Old Browser
+        const posObj = convPosition(panValue);
+        panNode.panningModel = "equalpower";
+        panNode.setPosition(posObj.x, posObj.y, posObj.z);
     }
 }
 
@@ -269,8 +266,8 @@ function convPosition(panValue) {
 
     const obj = {};
     const panAngle = panValue * 90;
-    obj.panX = Math.sin(panAngle * (Math.PI / 180));
-    obj.panY = 0;
-    obj.panZ = -Math.cos(panAngle * (Math.PI / 180));
+    obj.x = Math.sin(panAngle * (Math.PI / 180));
+    obj.y = 0;
+    obj.z = -Math.cos(panAngle * (Math.PI / 180));
     return obj;
 }

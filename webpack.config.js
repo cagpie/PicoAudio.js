@@ -1,7 +1,7 @@
 module.exports = (env, argv) => {
   console.log("build mode: " + argv.mode);
   return {
-    mode: argv.mode === 'production' ? 'production' : 'developmentl', 
+    mode: argv.mode === 'production' ? 'production' : 'development', 
     context: __dirname + '/src',
     entry: argv.mode === 'production' ? {
       'dist/PicoAudio.min': './main.js'

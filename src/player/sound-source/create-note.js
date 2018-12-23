@@ -1,6 +1,6 @@
 export default function createNote(option) {
     const note = this.createBaseNote(option, false, true, false, true); // oscillatorのstopはこちらで実行するよう指定
-    if (note.isGainValueZero) return null; // 
+    if (note.isGainValueZero) return null;
 
     const oscillator = note.oscillator;
     const gainNode = note.gainNode;
