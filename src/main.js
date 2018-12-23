@@ -19,7 +19,7 @@ import clearFunc from './player/stop-manager/clear-func.js';
 import getTime from './player/time/get-time.js';
 import getTiming from './player/time/get-timing.js';
 
-import measurePerformanceReverb from './util/measure-performance-reverb.js';
+import PerformanceUtil from './util/performance-util.js';
 
 import parseSMF from './smf/parse-smf.js';
 
@@ -175,7 +175,7 @@ class PicoAudio {
      * パフォーマンス計測
      */
     measurePerformanceReverb() {
-        return measurePerformanceReverb.call(this);
+        return PerformanceUtil.measureReverb.call(this);
     }
 
     // インターフェース関係 //

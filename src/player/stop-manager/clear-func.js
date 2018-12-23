@@ -1,4 +1,4 @@
-import arrayDelete from '../../util/array-splice.js';
+import ArrayUtil from '../../util/array-util.js';
 
 export default function clearFunc(tar1, tar2) {
     if (tar1 != "note"
@@ -11,7 +11,7 @@ export default function clearFunc(tar1, tar2) {
 
     this.states.stopFuncs.some((n, i, ary) => {
         if (n[tar1] == tar2) {
-            arrayDelete(ary, i); // ary.splice(i, 1); を高速化
+            ArrayUtil.delete(ary, i); // ary.splice(i, 1); を高速化
             return true;
         }
     });
