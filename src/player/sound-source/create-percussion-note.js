@@ -18,6 +18,167 @@ export default function createPercussionNote(option) {
     let stopAudioTime = 0;
     let stopAudioTime2 = 0;
     switch (option.pitch) {
+        // 元々のパーカッション音源 //
+        // Bass drum
+        case 35:
+        case 36:
+            // w
+            gainNode.gain.value = velocity*0.6;
+            source.playbackRate.value = 0.02;
+            stopAudioTime = 0.07;
+            // s
+            gainNode2.gain.value = velocity*1.1;
+            oscillator.frequency.setValueAtTime(120, start);
+            oscillator.frequency.linearRampToValueAtTime(50, start+0.07);
+            stopAudioTime2 = 0.07;
+            break;
+        // Snare
+        case 38:
+        case 40:
+            // w
+            source.playbackRate.value = 0.7;
+            stopAudioTime = 0.05;
+            // s
+            gainNode2.gain.setValueAtTime(velocity*0.8, start);
+            gainNode2.gain.linearRampToValueAtTime(0.0, start+0.05);
+            oscillator.frequency.setValueAtTime(300, start);
+            oscillator.frequency.linearRampToValueAtTime(200, start+0.05);
+            stopAudioTime2 = 0.05;
+            break;
+        // Toms
+        case 41: case 43: case 45:
+        case 47: case 48: case 50:
+            // w
+            source.playbackRate.value = 0.01;
+            stopAudioTime = 0.1;
+            // s
+            oscillator.type = "square";
+            gainNode2.gain.setValueAtTime(velocity, start);
+            gainNode2.gain.linearRampToValueAtTime(0.01, start+0.1);
+            oscillator.frequency.setValueAtTime(150+20*(option.pitch-40), start);
+            oscillator.frequency.linearRampToValueAtTime(50+20*(option.pitch-40), start+0.1);
+            stopAudioTime2 = 0.1;
+            break;
+        // Close Hihat
+        case 42:
+        case 44:
+            source.playbackRate.value = 1.5;
+            stopAudioTime = 0.02;
+            stopAudioTime2 = 0;
+            break;
+        // Open Hihat
+        case 46:
+            source.playbackRate.value = 1.5;
+            stopAudioTime = 0.3;
+            gainNode.gain.setValueAtTime(velocity*0.9, start);
+            gainNode.gain.linearRampToValueAtTime(0.0, start+0.3);
+            stopAudioTime2 = 0;
+            break;
+        // Cymbal
+        case 49: case 51: case 52:
+        case 53: case 55: case 57:
+            source.playbackRate.value = 1.2;
+            stopAudioTime = 0.5;
+            gainNode.gain.setValueAtTime(velocity*1, start);
+            gainNode.gain.linearRampToValueAtTime(0.0, start+0.5);
+            stopAudioTime2 = 0;
+            break;
+        // Cymbal2
+        case 51:
+            source.playbackRate.value = 1.1;
+            stopAudioTime = 0.4;
+            gainNode.gain.setValueAtTime(velocity*0.8, start);
+            gainNode.gain.linearRampToValueAtTime(0.0, start+0.4);
+            stopAudioTime2 = 0;
+            break;
+        // Cymbal3
+        case 59:
+            source.playbackRate.value = 1.8;
+            stopAudioTime = 0.3;
+            gainNode.gain.setValueAtTime(velocity*0.5, start);
+            gainNode.gain.linearRampToValueAtTime(0.0, start+0.3);
+            stopAudioTime2 = 0;
+            break;
+        // Bongo
+        case 60: case 61:
+            // w
+            source.playbackRate.value = 0.03;
+            stopAudioTime = 0.03;
+            // s
+            gainNode2.gain.setValueAtTime(velocity*0.8, start);
+            gainNode2.gain.linearRampToValueAtTime(0.0, start+0.1);
+            oscillator.frequency.setValueAtTime(400-40*(option.pitch-60), start);
+            oscillator.frequency.linearRampToValueAtTime(450-40*(option.pitch-60), start+0.1);
+            stopAudioTime2 = 0.1;
+            break;
+        // mute Conga
+        case 62:
+            // w
+            source.playbackRate.value = 0.03;
+            stopAudioTime = 0.03;
+            // s
+            gainNode2.gain.setValueAtTime(velocity, start);
+            gainNode2.gain.linearRampToValueAtTime(0.0, start+0.03);
+            oscillator.frequency.setValueAtTime(200, start);
+            oscillator.frequency.linearRampToValueAtTime(250, start+0.03);
+            stopAudioTime2 = 0.03;
+            break;
+        // open Conga
+        case 63: case 64:
+            // w
+            source.playbackRate.value = 0.03;
+            stopAudioTime = 0.03;
+            // s
+            gainNode2.gain.setValueAtTime(velocity, start);
+            gainNode2.gain.linearRampToValueAtTime(0.0, start+0.1);
+            oscillator.frequency.setValueAtTime(200-30*(option.pitch-63), start);
+            oscillator.frequency.linearRampToValueAtTime(250-30*(option.pitch-63), start+0.1);
+            stopAudioTime2 = 0.1;
+            break;
+        // Cowbell, Claves
+        case 56:
+        case 75:
+            // w
+            source.playbackRate.value = 0.01;
+            stopAudioTime = 0.1;
+            // s
+            gainNode2.gain.setValueAtTime(velocity, start);
+            gainNode2.gain.linearRampToValueAtTime(0.0, start+0.1);
+            oscillator.frequency.setValueAtTime(1000+48*(option.pitch-56), start);
+            stopAudioTime2 = 0.1;
+            break;
+        // mute triangle
+        case 80:
+            // w
+            source.playbackRate.value = 5;
+            gainNode.gain.setValueAtTime(velocity*0.5, start);
+            gainNode.gain.linearRampToValueAtTime(0.0, start+0.2);
+            stopAudioTime = 0.05;
+            // s
+            oscillator.type = "triangle"
+            gainNode2.gain.setValueAtTime(velocity*0.7, start);
+            gainNode2.gain.linearRampToValueAtTime(0.0, start+0.2);
+            oscillator.frequency.setValueAtTime(6000, start);
+            stopAudioTime2 = 0.05;
+            break;
+        // open triangle
+        case 81:
+            // w
+            source.playbackRate.value = 5;
+            gainNode.gain.setValueAtTime(velocity*0.9, start);
+            gainNode.gain.linearRampToValueAtTime(0.0, start+0.5);
+            stopAudioTime = 0.5;
+            // s
+            oscillator.type = "triangle"
+            gainNode2.gain.setValueAtTime(velocity*0.8, start);
+            gainNode2.gain.linearRampToValueAtTime(0.0, start+0.3);
+            oscillator.frequency.setValueAtTime(6000, start);
+            stopAudioTime2 = 0.3;
+            break;
+
+        // 新しいパーカッション音源 //
+        //     旧音源が優先で鳴る。上のソース
+        //     旧音源で定義されていない場合は、新音源で鳴る。下のソース //
         // Bass Drum
         case 35: // Acoustic Bass Drum
         case 36: // Bass Drum
