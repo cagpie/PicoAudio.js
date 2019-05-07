@@ -472,7 +472,7 @@ export default function createPercussionNote(option) {
         case 64: // Low Conga
         {
             const p = option.pitch;
-            const r = p==60 ? 700　: p==61 ? 282 : p==62 ? 385 : p==63 ? 295 : 210;
+            const r = p==60 ? 700 : p==61 ? 282 : p==62 ? 385 : p==63 ? 295 : 210;
             const len = p==60 ? 0.08 : p==61 ? 0.1 : p==62 ? 0.03 : p==63 ? 0.12 : 0.15;
             // w
             source.playbackRate.value = 0.03;
