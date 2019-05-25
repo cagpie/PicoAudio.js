@@ -218,7 +218,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
         this.stopAudioNode(modulationOscillator, stop, modulationGainNode);
     }
 
-    // oscillator又はホワイトノイズをスタート　//
+    // oscillator又はホワイトノイズをスタート //
     oscillator.start(start);
     if (!isDrum && !nonChannel && !nonStop) {
         this.stopAudioNode(oscillator, stop, stopGainNode);

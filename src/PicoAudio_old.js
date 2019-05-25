@@ -248,7 +248,7 @@ var PicoAudio = (function(){
 			isNoiseCut = true;
 		}
 
-		// 音色別の減衰　書き方ミスったなあ
+		// 音色別の減衰 書き方ミスったなあ
 		switch(this.channels[note.channel][1]/10 || option.instrument){
 			// ピッチカート系減衰
 			case 0.2:
@@ -601,7 +601,7 @@ var PicoAudio = (function(){
 			case 63: // Open High Conga
 			case 64: // Low Conga
 				var p = option.pitch;
-				var r = p==60 ? 700　: p==61 ? 282 : p==62 ? 385 : p==63 ? 295 : 210;
+				var r = p==60 ? 700 : p==61 ? 282 : p==62 ? 385 : p==63 ? 295 : 210;
 				var len = p==60 ? 0.08 : p==61 ? 0.1 : p==62 ? 0.03 : p==63 ? 0.12 : 0.15;
 				// w
 				source.playbackRate.value = 0.03;
@@ -1260,13 +1260,13 @@ var PicoAudio = (function(){
 				for(var t=0; t<16; t++){
 					this.settings.WebMIDIPortOutput.send([0xC0+t, 0]);
 					this.settings.WebMIDIPortOutput.send([0xE0+t, 0, 64]);
-					// ピッチあたりのずれがひどくなる場合がある　よくわからない
+					// ピッチあたりのずれがひどくなる場合がある よくわからない
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 100, 0]);
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 101, 0]);
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 6, 2]); //pitchbend
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 100, 1]);
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 96, 0]);
-					this.settings.WebMIDIPortOutput.send([0xB0+t, 97, 64]);　//tuning?
+					this.settings.WebMIDIPortOutput.send([0xB0+t, 97, 64]); //tuning?
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 7, 100]); // volume
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 10, 64]); // pan
 					this.settings.WebMIDIPortOutput.send([0xB0+t, 11, 127]); // expression
