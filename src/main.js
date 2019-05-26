@@ -212,7 +212,9 @@ class PicoAudio {
     }
     setMasterVolume(volume) {
         this.settings.masterVolume = volume;
-        this.masterGainNode.gain.value = this.settings.masterVolume;
+        if (this.isStarted) {
+            this.masterGainNode.gain.value = this.settings.masterVolume;
+        }
     }
     isLoop() {
         return this.settings.loop;
