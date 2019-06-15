@@ -45,8 +45,8 @@ export default function picoAudioConstructor(_audioContext, _picoAudio) {
         webMIDIWaitState: null,
         webMIDIStopTime: 0,
         playIndices: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        updateBufTime: 50,
-        updateBufMaxTime: 150,
+        updateBufTime: 100,
+        updateBufMaxTime: 350,
         updateIntervalTime: 0,
         latencyLimitTime: 0
     };
