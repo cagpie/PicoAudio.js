@@ -1,5 +1,3 @@
-//import '@babel/polyfill';
-
 import picoAudioConstructor from './init/constructor.js';
 import init from './init/init.js';
 
