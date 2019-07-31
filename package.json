@@ -14,13 +14,13 @@
   "author": "cagpie",
   "license": "MIT",
   "devDependencies": {
-    "@babel/core": "^7.4.5",
+    "@babel/core": "^7.5.5",
     "@babel/polyfill": "^7.4.4",
-    "@babel/preset-env": "^7.4.5",
+    "@babel/preset-env": "^7.5.5",
     "babel-loader": "^8.0.6",
     "core-js": "^3.1.4",
-    "webpack": "^4.35.0",
-    "webpack-cli": "^3.3.5",
+    "webpack": "^4.38.0",
+    "webpack-cli": "^3.3.6",
     "webpack-dev-server": "^3.7.2"
   }
 }

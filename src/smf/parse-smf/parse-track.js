@@ -29,6 +29,7 @@ export default function parseTrack(info) {
 
     const tempoTrack = [];
     const beatTrack = [];
+    let songLength = 0;
     for (let t=0; t<header.trackcount; t++) {
         // "MTrk"
         if (smf[p] != 77 || smf[p+1] != 84 || smf[p+2] != 114 || smf[p+3] != 107)
@@ -186,6 +187,7 @@ export default function parseTrack(info) {
                 }
             }
         }
+        if (!this.settings.isSkipEnding && songLength < tick) songLength = tick;
         // リスト配列のポインタを初期化
         for (let i=0; i<channels.length; i++) {
             channels[i].indicesCur = channels[i].indicesHead;
@@ -197,5 +199,6 @@ export default function parseTrack(info) {
     info.p = p;
     info.tempoTrack = tempoTrack;
     info.beatTrack = beatTrack;
+    info.songLength = songLength;
     return info;
 }

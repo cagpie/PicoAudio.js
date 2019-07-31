@@ -6,12 +6,12 @@ export default function parseEvent(info) {
     const header = info.header;
     const channels = info.channels;
     const tempoTrack = info.tempoTrack;
+    let songLength = info.songLength;
 
     // SMFのMIDIイベント解析 //
     let tempo;
     let tempoCurTick;
-    let tempoCurTime; 
-    let songLength = 0;
+    let tempoCurTime;
     let cc111Tick = -1;
     let cc111Time = -1;
     let firstNoteOnTiming = Number.MAX_SAFE_INTEGER; // 最初のノートオンのTick
