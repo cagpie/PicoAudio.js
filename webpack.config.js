@@ -18,19 +18,22 @@ module.exports = (env, argv) => {
       contentBase: 'dist',
       open: true
     },
+    optimization: {
+        minimize: argv.mode==="production"
+    },
     module: {
       rules: [
         {
           test: /\.js$/,
           use: [
-            {
+            /*{
               loader: 'babel-loader',
               options: {
                 presets: [
                   '@babel/preset-env',
                 ]
               }
-            }
+          }*/
           ]
         }
       ]
