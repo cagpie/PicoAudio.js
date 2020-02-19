@@ -5,8 +5,8 @@
   "main": "main.js",
   "scripts": {
     "setup": "npm install",
-    "build": "webpack --mode development && webpack --mode production",
-    "develop": "webpack --mode development",
+    "all-build": "webpack && webpack --mode production && webpack --mode development && webpack --babel 0 && webpack --mode production --babel 0 && webpack --mode development --babel 0 && webpack --tonyu2 && webpack --mode production --tonyu2 && webpack --mode development --tonyu2",
+    "build": "webpack && webpack --mode production && webpack --mode development",
     "start-server": "webpack-dev-server",
     "watch": "webpack --watch"
   },
@@ -14,12 +14,12 @@
   "author": "cagpie",
   "license": "MIT",
   "devDependencies": {
-    "@babel/core": "^7.5.5",
-    "@babel/polyfill": "^7.4.4",
-    "@babel/preset-env": "^7.4.4",
+    "@babel/core": "^7.8.4",
+    "@babel/polyfill": "^7.8.3",
+    "@babel/preset-env": "^7.8.4",
     "babel-loader": "^8.0.5",
     "webpack": "^4.41.5",
-    "webpack-cli": "^3.3.1",
-    "webpack-dev-server": "^3.3.1"
+    "webpack-cli": "^3.3.11",
+    "webpack-dev-server": "^3.10.3"
   }
 }

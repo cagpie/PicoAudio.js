@@ -1,8 +1,8 @@
 export default function picoAudioConstructor(_audioContext, _picoAudio) {
-    this.debug = false;
+    this.debug = process.env.BUILD_MODE;
     this.isStarted = false;
     this.isPlayed = false;
-    this.isTonyu2 = false;
+    this.isTonyu2 = process.env.TONYU2;
     this.settings = {
         masterVolume: 1,
         generateVolume: 0.15,
