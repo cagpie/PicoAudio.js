@@ -398,7 +398,7 @@ window.PicoAudio = PicoAudio;
 __webpack_require__.r(__webpack_exports__);
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "default", function() { return picoAudioConstructor; });
 function picoAudioConstructor(_audioContext, _picoAudio) {
-    this.debug = undefined;
+    this.debug = false;
     this.isStarted = false;
     this.isPlayed = false;
     this.isTonyu2 = false;

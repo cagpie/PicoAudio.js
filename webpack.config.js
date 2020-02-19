@@ -74,7 +74,7 @@ module.exports = (env, argv) => {
     },
     plugins: [
       new webpack.DefinePlugin({
-        'process.env.BUILD_MODE': JSON.stringify(argv.mode),
+        'process.env.DEBUG': JSON.stringify(argv.mode === 'development'),
         'process.env.TONYU2': JSON.stringify(argv.tonyu2)
       })
     ]

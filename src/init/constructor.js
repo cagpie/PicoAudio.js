@@ -1,5 +1,5 @@
 export default function picoAudioConstructor(_audioContext, _picoAudio) {
-    this.debug = process.env.BUILD_MODE;
+    this.debug = process.env.DEBUG;
     this.isStarted = false;
     this.isPlayed = false;
     this.isTonyu2 = process.env.TONYU2;
