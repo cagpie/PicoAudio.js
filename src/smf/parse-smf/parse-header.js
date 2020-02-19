@@ -23,7 +23,7 @@ export default function parseHeader(info) {
         // smfを読む順番を記録した索引配列を作る //
         // 型付き配列をリスト構造の配列のように使う（リスト構造にすることで挿入処理を高速化する）
         // [tick, smfMesLength, smfPtr, nextIndicesPtr, ...]
-        channel.indices = new Int32Array(Math.floor(smf.length/8));
+        channel.indices = [];
         channel.indicesLength = 0;
         channel.indicesHead = -1; // 先頭のポインタ
         channel.indicesFoot = 0; // 末尾のポインタ

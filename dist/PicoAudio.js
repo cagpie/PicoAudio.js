@@ -1571,26 +1571,7 @@ function () {
   }, {
     key: "chIndicesInsert",
     value: function chIndicesInsert(that, ch, time, p, len) {
-      var indices = ch.indices; // メモリー足りなくなったら拡張 //
-
-      if (indices.length <= ch.indicesLength + 4) {
-        if (that.debug) {
-          var ts1 = performance.now();
-        }
-
-        var temp = new Int32Array(Math.floor(indices.length * 2));
-
-        for (var i = indices.length - 1; i >= 0; i--) {
-          temp[i] = indices[i];
-        }
-
-        ch.indices = indices = temp;
-
-        if (that.debug) {
-          console.log("malloc", performance.now() - ts1, temp.length);
-        }
-      } // デルタタイムの順番になるようにリスト配列に挿入 //
-
+      var indices = ch.indices; // デルタタイムの順番になるようにリスト配列に挿入 //
 
       if (ch.indicesLength >= 4 && time < indices[ch.indicesFoot]) {
         // Insert //
@@ -3638,7 +3619,7 @@ function parseHeader(info) {
     // 型付き配列をリスト構造の配列のように使う（リスト構造にすることで挿入処理を高速化する）
     // [tick, smfMesLength, smfPtr, nextIndicesPtr, ...]
 
-    channel.indices = new Int32Array(Math.floor(smf.length / 8));
+    channel.indices = [];
     channel.indicesLength = 0;
     channel.indicesHead = -1; // 先頭のポインタ
 
