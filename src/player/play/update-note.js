@@ -257,8 +257,11 @@ export default class UpdateNote {
             if (tempNote.startTime - nowTime <= 0) {
                 ArrayUtil.delete(noteOnAry, i); // noteOnAry.splice(i, 1); の高速化
                 noteOffAry.push(tempNote);
-                // noteOnにコールバックを通知
+
+                // イベント発火
                 if (trigger.isNoteTrigger) trigger.noteOn(tempNote);
+                picoAudio.fireEvent('noteOn', tempNote);
+
                 i--;
             }
         }
@@ -281,8 +284,11 @@ export default class UpdateNote {
                 || (tempNote.channel == 9 && tempNote.drumStopTime - nowTime <= 0)) {
                 ArrayUtil.delete(noteOffAry, i); // noteOffAry.splice(i, 1); の高速化
                 picoAudio.clearFunc("note", tempNote);
-                // noteOffにコールバックを通知
+
+                // イベント発火
                 if (trigger.isNoteTrigger) trigger.noteOff(tempNote);
+                picoAudio.fireEvent('noteOff', tempNote);
+
                 i--;
             }
         }

@@ -1389,9 +1389,10 @@ function () {
         if (tempNote.startTime - nowTime <= 0) {
           _util_array_util_js__WEBPACK_IMPORTED_MODULE_0__["default"]["delete"](noteOnAry, i); // noteOnAry.splice(i, 1); の高速化
 
-          noteOffAry.push(tempNote); // noteOnにコールバックを通知
+          noteOffAry.push(tempNote); // イベント発火
 
           if (trigger.isNoteTrigger) trigger.noteOn(tempNote);
+          picoAudio.fireEvent('noteOn', tempNote);
           i--;
         }
       }
@@ -1416,9 +1417,10 @@ function () {
         if (tempNote.channel != 9 && tempNote.stopTime - nowTime <= 0 || tempNote.channel == 9 && tempNote.drumStopTime - nowTime <= 0) {
           _util_array_util_js__WEBPACK_IMPORTED_MODULE_0__["default"]["delete"](noteOffAry, i); // noteOffAry.splice(i, 1); の高速化
 
-          picoAudio.clearFunc("note", tempNote); // noteOffにコールバックを通知
+          picoAudio.clearFunc("note", tempNote); // イベント発火
 
           if (trigger.isNoteTrigger) trigger.noteOff(tempNote);
+          picoAudio.fireEvent('noteOff', tempNote);
           i--;
         }
       }
