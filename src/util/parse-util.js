@@ -43,20 +43,6 @@ export default class ParseUtil {
      */
     static chIndicesInsert(that, ch, time, p, len) {
         let indices = ch.indices;
-        // メモリー足りなくなったら拡張 //
-        if (indices.length <= ch.indicesLength+4) {
-            if (that.debug) {
-                var ts1 = performance.now();
-            }
-            let temp = new Int32Array(Math.floor(indices.length*2));
-            for (let i=indices.length-1; i>=0; i--) {
-                temp[i] = indices[i];
-            }
-            ch.indices = indices = temp;
-            if (that.debug) {
-                console.log("malloc", performance.now() - ts1, temp.length);
-            }
-        }
 
         // デルタタイムの順番になるようにリスト配列に挿入 //
         if (ch.indicesLength >= 4 && time < indices[ch.indicesFoot]) {

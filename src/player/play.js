@@ -79,7 +79,7 @@ export default function play(isSongLooping) {
     this.fireEvent('play');
 
     // 1ms毎コールバックの準備 //
-    UpdateNote.init(this);
+    UpdateNote.init(this, currentTime);
 
     // 1ms毎コールバックを開始 //
     const reserve = setInterval(() => {

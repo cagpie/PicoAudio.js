@@ -5,13 +5,14 @@ export default class UpdateNote {
     /**
      * 1ms毎処理用の変数を初期化
      */
-    static init(picoAudio) {
+    static init(picoAudio, currentTime) {
         this.updatePreTime = performance.now();
         this.pPreTime = performance.now();
         this.cPreTime = picoAudio.context.currentTime * 1000;
         this.pTimeSum = 0;
         this.cTimeSum = 0;
         this.cnt = 0;
+        this.initCurrentTime = currentTime;
     }
 
     /**
@@ -51,8 +52,8 @@ export default class UpdateNote {
         } else if (latencyTime <= -100) { // currentTimeが速い（誤差）
             cTimeSum = pTimeSum;
         } else {
-            if (states.latencyLimitTime>0) { // currentTimeが丁度いい
-                states.latencyLimitTime -= updateBufTime*0.04;
+            if (states.latencyLimitTime > 0) { // currentTimeが丁度いい
+                states.latencyLimitTime -= updateBufTime*0.003;
                 if (states.latencyLimitTime < 0) states.latencyLimitTime = 0;
             }
         }
@@ -63,21 +64,15 @@ export default class UpdateNote {
             states.updateBufTime = updateBufTime;
         } else { // 先読み量に余裕がある場合
             // 先読み量を少しずつ減らす //
-            if (states.updateBufTime > 50) {
-                states.updateBufTime -= states.updateBufTime*0.001;
-            }
-            if (states.updateBufTime > 100) {
-                states.updateBufTime -= states.updateBufTime*0.01;
-            }
-            if (states.updateBufMaxTime > 150) {
+            if (states.updateBufMaxTime > 350) {
                 states.updateBufMaxTime -= states.updateBufMaxTime*0.002;
             }
             // 先読み量を少しずつ増やす //
-            if (states.updateBufTime < 50) {
-                states.updateBufTime += states.updateBufTime*0.002;
+            if (states.updateBufTime < 20) {
+                states.updateBufTime += states.updateBufTime*0.0005;
             }
-            if (states.updateBufMaxTime >= 10 && states.updateBufMaxTime < 140) {
-                states.updateBufMaxTime += states.updateBufMaxTime*0.003;
+            if (states.updateBufMaxTime >= 10 && states.updateBufMaxTime < 340) {
+                states.updateBufMaxTime += states.updateBufMaxTime*0.002;
             }
         }
         // 先読み量が足りなくなった場合
@@ -101,7 +96,7 @@ export default class UpdateNote {
         }
 
         // サウンドが重すぎる場合、先読み度合いを小さくして負荷軽減 //
-        if (states.latencyLimitTime > 200) {
+        if (states.latencyLimitTime > 150) {
             cTimeSum = pTimeSum;
             states.latencyLimitTime -= 5;
             if (states.latencyLimitTime > 1000) states.latencyLimitTime = 1000;
@@ -117,7 +112,8 @@ export default class UpdateNote {
             let idx = states.playIndices[ch];
             for (; idx<notes.length; idx++) {
                 const note = notes[idx];
-                const curTime = context.currentTime - states.startTime;
+                const curTime = cnt == 0 ? this.initCurrentTime - states.startTime
+                    : context.currentTime - states.startTime;
 
                 // 終わったノートは演奏せずにスキップ
                 if (curTime >= note.stopTime) continue;
@@ -231,6 +227,9 @@ export default class UpdateNote {
             // messagesのどこまで送信したかを記憶して、次回コールバック時にそこから処理を始める
             states.playIndices[16] = idx;
         }
+
+        // 1msコールバックが呼ばれた回数をカウント
+        cnt ++;
 
         // 変数を反映 //
         this.updatePreTime = updateNowTime;

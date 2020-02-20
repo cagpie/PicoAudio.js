@@ -1,8 +1,8 @@
 export default function picoAudioConstructor(_audioContext, _picoAudio) {
-    this.debug = false;
+    this.debug = process.env.DEBUG;
     this.isStarted = false;
     this.isPlayed = false;
-    this.isTonyu2 = false;
+    this.isTonyu2 = process.env.TONYU2;
     this.settings = {
         masterVolume: 1,
         generateVolume: 0.15,
@@ -45,8 +45,8 @@ export default function picoAudioConstructor(_audioContext, _picoAudio) {
         webMIDIWaitState: null,
         webMIDIStopTime: 0,
         playIndices: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        updateBufTime: 50,
-        updateBufMaxTime: 150,
+        updateBufTime: 100,
+        updateBufMaxTime: 350,
         updateIntervalTime: 0,
         latencyLimitTime: 0
     };
