@@ -28,18 +28,30 @@ webpack --mode production --tonyu2
 PicoAudio.tonyu2.dev.js:
 webpack --mode development --tonyu2
 */
-var webpack = require("webpack");
+const webpack = require("webpack");
 module.exports = (env, argv) => {
-  argv.tonyu2 = !!argv.tonyu2;
-  argv.babel = argv.babel === undefined ? true : !!argv.babel;
-  if (argv.tonyu2) argv.babel = false;
-  const filename=`dist/PicoAudio${argv.tonyu2?".tonyu2":argv.babel?"":".es6"}${argv.mode==="production"?".min":argv.mode==="development"?".dev":""}`;
-  console.log("build mode: " + argv.mode);
-  console.log("use babel: "+ argv.babel);
-  console.log("use tonyu2: "+ argv.tonyu2);
+  let buildMode = argv.mode;
+  let isBabel = (argv.babel === undefined ? true : !!argv.babel);
+  const isTonyu2 = !!argv.tonyu2;
+
+  if (isTonyu2) {
+    isBabel = false;
+  }
+  if (buildMode !== "production" && buildMode !== "development") {
+    buildMode = "none";
+  }
+
+  const fn1 = (isTonyu2 ? ".tonyu2" : (isBabel ? "" : ".es6"));
+  const fn2 = (buildMode === "production" ? ".min" : (buildMode === "development" ? ".dev" : ""));
+  const filename = `dist/PicoAudio${fn1}${fn2}`;
+
+  console.log("build mode: " + buildMode);
+  console.log("use babel: "+ isBabel);
+  console.log("Tonyu2: "+ isTonyu2);
   console.log("filename: "+ filename);
+
   return {
-    mode: argv.mode === 'production' ? 'production' : argv.mode === 'development' ? 'development' : 'none',
+    mode: buildMode,
     context: __dirname + '/src',
     entry: {
       [filename]: './main.js'
@@ -55,13 +67,13 @@ module.exports = (env, argv) => {
       open: true
     },
     optimization: {
-        minimize: argv.mode==="production"
+      minimize: buildMode === "production"
     },
     module: {
       rules: [
         {
           test: /\.js$/,
-          use: (argv.babel?[{
+          use: (isBabel?[{
               loader: 'babel-loader',
               options: {
                 presets: [
@@ -74,8 +86,8 @@ module.exports = (env, argv) => {
     },
     plugins: [
       new webpack.DefinePlugin({
-        'process.env.DEBUG': JSON.stringify(argv.mode === 'development'),
-        'process.env.TONYU2': JSON.stringify(argv.tonyu2)
+        'process.env.DEBUG': JSON.stringify(buildMode === "development"),
+        'process.env.TONYU2': JSON.stringify(isTonyu2)
       })
     ]
   };
