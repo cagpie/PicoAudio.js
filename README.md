@@ -8,6 +8,8 @@ MIDIをブラウザで再生するためのJavaScriptライブラリです。
 
 [Picotune]( http://picotune.me/ )の、MIDI再生部分になります。 
 
+[Sample]( https://cagpie.github.io/PicoAudio.js/sample/sample1.html )
+
 ## 使い方(ざっくり)
 **インスタンスの生成と初期化**
 ```javascript
