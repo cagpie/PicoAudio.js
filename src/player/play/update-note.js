@@ -156,8 +156,8 @@ export default class UpdateNote {
 
                     // １ノート分の再生処理（WebAudioで再生） //
                     const stopFunc =
-                        note.channel != 9 ? picoAudio.createNote(note)
-                        : picoAudio.createPercussionNote(note);
+                        note.channel != 9 ? picoAudio.createSamplingNote(note)
+                        : null;
                     if (!stopFunc) continue; // 無音の場合、処理しない
                     picoAudio.pushFunc({
                         note: note,

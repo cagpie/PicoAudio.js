@@ -1,3 +1,7 @@
+import 'core-js';
+import 'regenerator-runtime/runtime';
+
+
 import picoAudioConstructor from './init/constructor.js';
 import init from './init/init.js';
 
@@ -9,6 +13,7 @@ import stop from './player/stop.js';
 import createBaseNote from './player/sound-source/create-base-note.js';
 import createNote from './player/sound-source/create-note.js';
 import createPercussionNote from './player/sound-source/create-percussion-note.js';
+import createSamplingNote from './player/sound-source/create-sampling-note.js';
 
 import stopAudioNode from './player/stop-manager/stop-audio-node.js';
 import pushFunc from './player/stop-manager/push-func.js';
@@ -133,6 +138,10 @@ class PicoAudio {
      */
     createPercussionNote(option) {
         return createPercussionNote.call(this, option);
+    }
+
+    createSamplingNote(option) {
+        return createSamplingNote.call(this, option);
     }
 
     // 停止管理関係 //

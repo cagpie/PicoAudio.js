@@ -73,14 +73,20 @@ module.exports = (env, argv) => {
       rules: [
         {
           test: /\.js$/,
-          use: (isBabel?[{
+          use: ([{
               loader: 'babel-loader',
               options: {
-                presets: [
-                  '@babel/preset-env',
+                "presets": [
+                  [
+                    "@babel/preset-env",
+                    {
+                      "corejs": 2,
+                      "useBuiltIns": "entry"
+                    }
+                  ]
                 ]
               }
-          }]:[])
+          }])
         }
       ]
     },

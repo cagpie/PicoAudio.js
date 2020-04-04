@@ -1,7 +1,8 @@
 import RandomUtil from '../util/random-util.js';
 import InterpolationUtil from '../util/interpolation-util.js';
+import loadSoundfont from '../util/load-soundfont';
 
-export default function init(_audioContext, _picoAudio) {
+export default async function init(_audioContext, _picoAudio) {
     if (this.isStarted) return;
     this.isStarted = true;
 
@@ -104,6 +105,17 @@ export default function init(_audioContext, _picoAudio) {
             this.settings.isReverb = _picoAudio.settings.isReverb;
         } else {
             this.settings.isReverb = this.measurePerformanceReverb();
+        }
+    }
+
+    // SoundFontのBuffer化
+    if (typeof(window.MIDI) === 'undefined') window.MIDI = {};
+    if (typeof(window.MIDI.Soundfont) === 'undefined') window.MIDI.Soundfont = {};
+    if (typeof(window.MIDI.SoundfontBuffer) === 'undefined') window.MIDI.SoundfontBuffer = {};
+
+    for (let sf in window.MIDI.Soundfont) {
+        if (!(sf in window.MIDI.SoundfontBuffer)) {
+            window.MIDI.SoundfontBuffer[sf] = await loadSoundfont(this.context, window.MIDI.Soundfont[sf]);
         }
     }
 }
