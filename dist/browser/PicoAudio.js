@@ -217,7 +217,9 @@ var PicoAudio = (function () {
       // 同時発音数(パーカッション) -1:infinity
       isOfflineRendering: false,
       // TODO 演奏データを作成してから演奏する
-      isSameDrumSoundOverlap: false // 同じドラムの音が重なることを許容するか
+      isSameDrumSoundOverlap: false,
+      // 同じドラムの音が重なることを許容するか
+      baseLatency: -1 // レイテンシの設定 -1:auto
 
     }; // argsObjで設定値が指定されていたら上書きする
 
@@ -261,7 +263,8 @@ var PicoAudio = (function () {
       value: 120
     }];
     this.cc111Time = -1;
-    this.onSongEndListener = null; // チャンネルの設定値（音色, 減衰, 音量） //
+    this.onSongEndListener = null;
+    this.baseLatency = 0.01; // チャンネルの設定値（音色, 減衰, 音量） //
 
     for (var i = 0; i < 17; i++) {
       this.channels.push([0, 0, 1]);
@@ -485,7 +488,13 @@ var PicoAudio = (function () {
     this.chorusDelayNode.connect(this.chorusGainNode);
     this.chorusGainNode.connect(this.masterGainNode);
     this.masterGainNode.connect(this.context.destination);
-    this.chorusOscillator.start(0);
+    this.chorusOscillator.start(0); // レイテンシの設定 //
+
+    this.baseLatency = this.context.baseLatency || this.baseLatency;
+
+    if (this.settings.baseLatency != -1) {
+      this.baseLatency = this.settings.baseLatency;
+    }
   }
 
   var Performance = /*#__PURE__*/function () {
@@ -779,6 +788,7 @@ var PicoAudio = (function () {
         var context = picoAudio.context;
         var settings = picoAudio.settings;
         var states = picoAudio.states;
+        var baseLatency = picoAudio.baseLatency;
         var updateNowTime = Performance.now();
         var updatePreTime = this.updatePreTime;
         var pPreTime = this.pPreTime;
@@ -880,7 +890,7 @@ var PicoAudio = (function () {
 
             if (curTime >= note.stopTime) return "continue"; // （シークバーで途中から再生時）startTimeが過ぎたものは鳴らさない
 
-            if (cnt == 0 && curTime > note.startTime) return "continue"; // 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
+            if (cnt == 0 && curTime > note.startTime + baseLatency) return "continue"; // 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
 
             if (curTime < note.startTime - states.updateBufTime / 1000) return "break"; // PicoAudio音源の再生処理 //
 
@@ -1220,6 +1230,7 @@ var PicoAudio = (function () {
     var settings = this.settings;
     var context = this.context;
     var songStartTime = this.states.startTime;
+    var baseLatency = this.baseLatency;
     var channel = nonChannel ? 0 : option.channel || 0;
     var velocity = option.velocity * Number(nonChannel ? 1 : this.channels[channel][2] != null ? this.channels[channel][2] : 1) * settings.generateVolume;
     var isGainValueZero = true; // 無音の場合は処理終了 //
@@ -1236,7 +1247,7 @@ var PicoAudio = (function () {
       option.expression ? option.expression.forEach(function (p) {
         var v = velocity * (p.value / 127);
         if (v > 0) isGainValueZero = false;
-        var t = p.time + songStartTime;
+        var t = p.time + songStartTime + baseLatency;
         if (t < 0) t = 0;
         expGainNode.gain.setValueAtTime(v, t);
       }) : false;
@@ -1255,8 +1266,8 @@ var PicoAudio = (function () {
     } // 全ての変数を準備 //
 
 
-    var start = option.startTime + songStartTime;
-    var stop = option.stopTime + songStartTime;
+    var start = option.startTime + songStartTime + baseLatency;
+    var stop = option.stopTime + songStartTime + baseLatency;
     var pitch = settings.basePitch * Math.pow(Math.pow(2, 1 / 12), (option.pitch || 69) - 69);
     var oscillator = !isDrum ? context.createOscillator() : context.createBufferSource();
     var panNode = context.createStereoPanner ? context.createStereoPanner() : context.createPanner ? context.createPanner() : {
@@ -1273,7 +1284,7 @@ var PicoAudio = (function () {
       oscillator.detune.value = 0;
       oscillator.frequency.value = pitch;
       option.pitchBend ? option.pitchBend.forEach(function (p) {
-        var t = p.time + songStartTime;
+        var t = p.time + songStartTime + baseLatency;
         if (t < 0) t = 0;
         oscillator.frequency.setValueAtTime(settings.basePitch * Math.pow(Math.pow(2, 1 / 12), option.pitch - 69 + p.value), t);
       }) : false;
@@ -1300,7 +1311,7 @@ var PicoAudio = (function () {
 
           var v = p.value == 64 ? 0 : p.value / 127 * 2 - 1;
           if (v > 1.0) v = 1.0;
-          var t = p.time + songStartTime;
+          var t = p.time + songStartTime + baseLatency;
           if (t < 0) t = 0;
           panNode.pan.setValueAtTime(v, t);
         }) : false;
@@ -1318,7 +1329,7 @@ var PicoAudio = (function () {
 
             var v = p.value == 64 ? 0 : p.value / 127 * 2 - 1;
             var posObj = convPosition(v);
-            var t = p.time + songStartTime;
+            var t = p.time + songStartTime + baseLatency;
             if (t < 0) t = 0;
             panNode.positionX.setValueAtTime(posObj.x, t);
             panNode.positionY.setValueAtTime(posObj.y, t);
@@ -1340,7 +1351,7 @@ var PicoAudio = (function () {
               if (v > 1.0) v = 1.0;
               var posObj = convPosition(v);
               panNode.setPosition(posObj.x, posObj.y, posObj.z);
-            }, (p.time + songStartTime - context.currentTime) * 1000);
+            }, (p.time + songStartTime + baseLatency - context.currentTime) * 1000);
 
             _this.pushFunc({
               pan: reservePan,
@@ -1380,7 +1391,7 @@ var PicoAudio = (function () {
 
         var m = p.value / 127;
         if (m > 1.0) m = 1.0;
-        var t = p.time + songStartTime;
+        var t = p.time + songStartTime + baseLatency;
         if (t < 0) t = 0;
         modulationGainNode.gain.setValueAtTime(pitch * 10 / 440 * m, t);
       }) : false;
@@ -1405,7 +1416,7 @@ var PicoAudio = (function () {
 
         var r = p.value / 127;
         if (r > 1.0) r = 1.0;
-        var t = p.time + songStartTime;
+        var t = p.time + songStartTime + baseLatency;
         if (t < 0) t = 0;
         convolverGainNode.gain.setValueAtTime(r, t);
       }) : false;
@@ -1430,7 +1441,7 @@ var PicoAudio = (function () {
 
         var c = p.value / 127;
         if (c > 1.0) c = 1.0;
-        var t = p.time + songStartTime;
+        var t = p.time + songStartTime + baseLatency;
         if (t < 0) t = 0;
         chorusGainNode.gain.setValueAtTime(c, t);
       }) : false;

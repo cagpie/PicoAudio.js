@@ -25,6 +25,7 @@ export default class UpdateNote {
         const context = picoAudio.context;
         const settings = picoAudio.settings;
         const states = picoAudio.states;
+        const baseLatency = picoAudio.baseLatency;
         const updateNowTime = Performance.now();
         const updatePreTime = this.updatePreTime;
         let pPreTime = this.pPreTime;
@@ -118,7 +119,7 @@ export default class UpdateNote {
                 // 終わったノートは演奏せずにスキップ
                 if (curTime >= note.stopTime) continue;
                 // （シークバーで途中から再生時）startTimeが過ぎたものは鳴らさない
-                if (cnt == 0 && curTime > note.startTime) continue;
+                if (cnt == 0 && curTime > note.startTime + baseLatency) continue;
                 // 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
                 if (curTime < note.startTime - states.updateBufTime/1000) break;
 

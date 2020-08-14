@@ -34,7 +34,8 @@ export default function picoAudioConstructor(argsObj) {
         maxPoly: -1, // 同時発音数 -1:infinity
         maxPercPoly: -1, // 同時発音数(パーカッション) -1:infinity
         isOfflineRendering: false, // TODO 演奏データを作成してから演奏する
-        isSameDrumSoundOverlap: false // 同じドラムの音が重なることを許容するか
+        isSameDrumSoundOverlap: false, // 同じドラムの音が重なることを許容するか
+        baseLatency: -1 // レイテンシの設定 -1:auto
     };
 
     // argsObjで設定値が指定されていたら上書きする
@@ -75,6 +76,7 @@ export default function picoAudioConstructor(argsObj) {
     ];
     this.cc111Time = -1;
     this.onSongEndListener = null;
+    this.baseLatency = 0.01;
 
     // チャンネルの設定値（音色, 減衰, 音量） //
     for (let i=0; i<17; i++) {

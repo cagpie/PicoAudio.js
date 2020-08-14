@@ -100,4 +100,10 @@ export default function init(argsObj) {
     this.chorusGainNode.connect(this.masterGainNode);
     this.masterGainNode.connect(this.context.destination);
     this.chorusOscillator.start(0);
+
+    // レイテンシの設定 //
+    this.baseLatency = this.context.baseLatency || this.baseLatency;
+    if (this.settings.baseLatency != -1) {
+        this.baseLatency = this.settings.baseLatency;
+    }
 }
