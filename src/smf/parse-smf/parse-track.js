@@ -46,12 +46,12 @@ export default function parseTrack(info) {
         while (p<endPoint) {
             // DeltaTime
             if (lastState != null) {
-                let lengthAry = ParseUtil.variableLengthToInt(smf, p, p+5);
+                const lengthAry = ParseUtil.variableLengthToInt(smf, p, p+5);
                 dt = lengthAry[0];
                 tick += dt;
                 p += lengthAry[1];
             }
-            let cashP = p; // WebMIDI用
+            const cashP = p; // WebMIDI用
             // Events
             const mes0 = smf[p] >> 4; // Math.floor(smf[p] / 0x10)
             switch (mes0) {

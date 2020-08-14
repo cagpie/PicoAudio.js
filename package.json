@@ -1,25 +1,40 @@
 {
-  "name": "pico-audio.js",
+  "name": "pico-audio-js",
   "version": "1.0.0",
-  "description": "",
-  "main": "main.js",
+  "description": "playing MIDI on web",
+  "main": "./dist/nodejs/pico-audio.js",
+  "module": "./dist/nodejs/pico-audio.mjs",
   "scripts": {
-    "setup": "npm install",
-    "all-build": "webpack && webpack --mode production && webpack --mode development && webpack --babel 0 && webpack --mode production --babel 0 && webpack --mode development --babel 0 && webpack --tonyu2 && webpack --mode production --tonyu2 && webpack --mode development --tonyu2",
-    "build": "webpack && webpack --mode production && webpack --mode development",
-    "start-server": "webpack-dev-server",
-    "watch": "webpack --watch"
+    "build": "rollup -c",
+    "build:map": "rollup -cm",
+    "watch": "rollup -cmw --environment WATCH",
+    "lint": "eslint src"
   },
-  "keywords": [],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cagpie/PicoAudio.js.git"
+  },
+  "keywords": [
+    "midi",
+    "smf",
+    "chiptune",
+    "web audio api",
+    "web-audio-api",
+    "web midi api",
+    "web-midi-api"
+  ],
   "author": "cagpie",
   "license": "MIT",
   "devDependencies": {
-    "@babel/core": "^7.8.4",
-    "@babel/polyfill": "^7.8.3",
-    "@babel/preset-env": "^7.8.4",
-    "babel-loader": "^8.0.5",
-    "webpack": "^4.41.5",
-    "webpack-cli": "^3.3.11",
-    "webpack-dev-server": "^3.10.3"
-  }
+    "@babel/core": "^7.11.1",
+    "@babel/preset-env": "^7.11.0",
+    "@rollup/plugin-babel": "^5.1.0",
+    "core-js": "^3.6.5",
+    "eslint": "^7.6.0",
+    "rollup": "^2.23.1",
+    "rollup-plugin-livereload": "^1.3.0",
+    "rollup-plugin-serve": "^1.0.3",
+    "rollup-plugin-terser": "^7.0.0"
+  },
+  "dependencies": {}
 }

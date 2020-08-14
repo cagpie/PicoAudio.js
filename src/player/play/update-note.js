@@ -1,13 +1,14 @@
 import ArrayUtil from '../../util/array-util.js';
 import ParseUtil from '../../util/parse-util.js';
+import {Performance} from '../../util/ponyfill.js';
 
 export default class UpdateNote {
     /**
      * 1ms毎処理用の変数を初期化
      */
     static init(picoAudio, currentTime) {
-        this.updatePreTime = performance.now();
-        this.pPreTime = performance.now();
+        this.updatePreTime = Performance.now();
+        this.pPreTime = Performance.now();
         this.cPreTime = picoAudio.context.currentTime * 1000;
         this.pTimeSum = 0;
         this.cTimeSum = 0;
@@ -24,8 +25,8 @@ export default class UpdateNote {
         const context = picoAudio.context;
         const settings = picoAudio.settings;
         const states = picoAudio.states;
-        let updateNowTime = performance.now();
-        let updatePreTime = this.updatePreTime;
+        const updateNowTime = Performance.now();
+        const updatePreTime = this.updatePreTime;
         let pPreTime = this.pPreTime;
         let cPreTime = this.cPreTime;
         let pTimeSum = this.pTimeSum;
@@ -114,13 +115,10 @@ export default class UpdateNote {
                 const note = notes[idx];
                 const curTime = cnt == 0 ? this.initCurrentTime - states.startTime
                     : context.currentTime - states.startTime;
-
                 // 終わったノートは演奏せずにスキップ
                 if (curTime >= note.stopTime) continue;
                 // （シークバーで途中から再生時）startTimeが過ぎたものは鳴らさない
-                if (cnt == 0 && curTime > note.startTime+0.05) continue;
-                // AudioParam.setValueAtTime()等でマイナスが入るとエラーになるので対策
-                if (curTime + note.startTime < 0) continue;
+                if (cnt == 0 && curTime > note.startTime) continue;
                 // 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
                 if (curTime < note.startTime - states.updateBufTime/1000) break;
 
@@ -210,14 +208,14 @@ export default class UpdateNote {
                                 for (let i=0; i<size; i++)
                                     webMIDIMes[i+1] = smfData[sysExStartP + i];
                                 settings.WebMIDIPortOutput.send(webMIDIMes,
-                                    (time - context.currentTime + window.performance.now()/1000 + states.startTime) * 1000);
+                                    (time - context.currentTime + Performance.now()/1000 + states.startTime) * 1000);
                             }
                         } else {
                             // sysEx以外のMIDIメッセージ
                             const sendMes = [];
                             for (let i=0; i<pLen; i++) sendMes.push(smfData[p+i]);
                             settings.WebMIDIPortOutput.send(sendMes,
-                                (time - context.currentTime + window.performance.now()/1000 + states.startTime) * 1000);
+                                (time - context.currentTime + Performance.now()/1000 + states.startTime) * 1000);
                         }
                     } catch(e) {
                         console.log(e, p, pLen, time, state);

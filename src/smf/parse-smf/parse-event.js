@@ -1,4 +1,5 @@
 import ArrayUtil from '../../util/array-util.js';
+import {Number_MAX_SAFE_INTEGER} from '../../util/ponyfill.js';
 
 export default function parseEvent(info) {
     // 関数呼び出し元からデータをもらう //
@@ -14,8 +15,8 @@ export default function parseEvent(info) {
     let tempoCurTime;
     let cc111Tick = -1;
     let cc111Time = -1;
-    let firstNoteOnTiming = Number.MAX_SAFE_INTEGER; // 最初のノートオンのTick
-    let firstNoteOnTime = Number.MAX_SAFE_INTEGER;
+    let firstNoteOnTiming = Number_MAX_SAFE_INTEGER; // 最初のノートオンのTick
+    let firstNoteOnTime = Number_MAX_SAFE_INTEGER;
     let lastNoteOffTiming = 0; // 最後のノートオフのTick
     let lastNoteOffTime = 0;
 
@@ -29,7 +30,7 @@ export default function parseEvent(info) {
         let velocity = 100;
         let modulation = 0;
         let hold = 0;
-        let reverb = this.isTonyu2 ? 0 : 10;
+        let reverb = this.settings.initReverb;
         let chorus = 0;
         let nrpnLsb = 127;
         let nrpnMsb = 127;
@@ -328,7 +329,7 @@ export default function parseEvent(info) {
                 // If (note.cc[x].timing > lastNoteOffTiming), delete note.cc[x]
                 const nameAry = ["pitchBend", "pan", "expression", "modulation", "reverb", "chorus"];
                 nameAry.forEach((name) => {
-                    const ccAry = note[name]
+                    const ccAry = note[name];
                     for (let i2=ccAry.length-1; i2>=1; i2--) {
                         const obj = ccAry[i2];
                         if (obj.timing>lastNoteOffTiming) {

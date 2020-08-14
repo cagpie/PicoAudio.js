@@ -1,8 +1,15 @@
-export default function picoAudioConstructor(_audioContext, _picoAudio) {
-    this.debug = process.env.DEBUG;
+/*
+argsObj {
+    debug,
+    audioContext,
+    picoAudio,
+    etc (this.settings.xxx)
+}
+*/
+export default function picoAudioConstructor(argsObj) {
+    this.debug = false;
     this.isStarted = false;
     this.isPlayed = false;
-    this.isTonyu2 = process.env.TONYU2;
     this.settings = {
         masterVolume: 1,
         generateVolume: 0.15,
@@ -16,11 +23,12 @@ export default function picoAudioConstructor(_audioContext, _picoAudio) {
         WebMIDIPortSysEx: true, // MIDIデバイスのフルコントロールをするかどうか（SysExを使うかどうか）(httpsじゃないと使えない)
         isReverb: true, // リバーブONにするか
         reverbVolume: 1.5,
+        initReverb: 10,
         isChorus: true,
         chorusVolume: 0.5,
         isCC111: true,
         loop: false,
-        isSkipBeginning: this.isTonyu2, // 冒頭の余白をスキップ(Tonyu2はtrue)
+        isSkipBeginning: false, // 冒頭の余白をスキップ
         isSkipEnding: true, // 末尾の空白をスキップ
         holdOnValue: 64,
         maxPoly: -1, // 同時発音数 -1:infinity
@@ -28,6 +36,13 @@ export default function picoAudioConstructor(_audioContext, _picoAudio) {
         isOfflineRendering: false, // TODO 演奏データを作成してから演奏する
         isSameDrumSoundOverlap: false // 同じドラムの音が重なることを許容するか
     };
+
+    // argsObjで設定値が指定されていたら上書きする
+    rewriteVar(this, argsObj, "debug");
+    for (let key in this.settings) {
+        rewriteVar(this.settings, argsObj, key);
+    }
+
     this.events = [];
     this.trigger = {
         isNoteTrigger: true,
@@ -67,22 +82,13 @@ export default function picoAudioConstructor(_audioContext, _picoAudio) {
     }
 
     // AudioContextがある場合はそのまま初期化、なければAudioContextを用いる初期化をinit()で
-    if (_audioContext) {
-        this.init(_audioContext, _picoAudio);
+    if (argsObj && argsObj.audioContext) {
+        this.init(argsObj);
     }
+}
 
-    // Fallback
-    // Unsupport performance.now()
-    if (typeof performance === "undefined") {
-        window.performance = {};
-    }
-    if (!performance.now) {
-        performance.now = () => {
-            return Date.now();
-        };
-    }
-    // Unsupport Number.MAX_SAFE_INTEGER
-    if (!Number.MAX_SAFE_INTEGER) {
-        Number.MAX_SAFE_INTEGER = 9007199254740991;
+function rewriteVar(dist, src, hensu) {
+    if (src && src[hensu] != null && dist && dist[hensu] != null) {
+        dist[hensu] = src[hensu];
     }
 }

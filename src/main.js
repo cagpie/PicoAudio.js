@@ -17,32 +17,25 @@ import clearFunc from './player/stop-manager/clear-func.js';
 import getTime from './player/time/get-time.js';
 import getTiming from './player/time/get-timing.js';
 
-import PerformanceUtil from './util/performance-util.js';
-
 import parseSMF from './smf/parse-smf.js';
 
-import startWebMIDI from './web-midi/start-web-midi.js'
+import startWebMIDI from './web-midi/start-web-midi.js';
 
-/**
- * MIDIをブラウザで再生するためのライブラリ
- */
 class PicoAudio {
     /**
      * PicoAudioクラスのコンストラクタ
-     * @param {AudioContext} audioContext 
-     * @param {PicoAudio} picoAudio 
+     * @param {Object} argsObj 
      */
-    constructor(audioContext, picoAudio) {
-        picoAudioConstructor.call(this, audioContext, picoAudio);
+    constructor(argsObj) {
+        picoAudioConstructor.call(this, argsObj);
     }
 
     /**
      * 初期化・準備
-     * @param {AudioContext} audioContext 
-     * @param {PicoAudio} picoAudio 
+     * @param {Object} argsObj 
      */
-    init(audioContext, picoAudio) {
-        return init.call(this, audioContext, picoAudio);
+    init(argsObj) {
+        return init.call(this, argsObj);
     }
     
     /**
@@ -85,6 +78,10 @@ class PicoAudio {
      */
     initStatus(_isSongLooping, _isLight) {
         return initStatus.call(this, _isSongLooping, _isLight);
+    }
+
+    setStartTime(offset) {
+        this.states.startTime -= offset;
     }
 
     // 時関関係 //
@@ -136,28 +133,12 @@ class PicoAudio {
     }
 
     // 停止管理関係 //
-    /**
-     * 各々のNoteの音停止処理
-     * @param {Object} tar 
-     * @param {number} time 
-     * @param {Object} stopGainNode 
-     * @param {boolean} isNoiseCut 
-     */
     stopAudioNode(tar, time, stopGainNode, isNoiseCut) {
         return stopAudioNode.call(this, tar, time, stopGainNode, isNoiseCut);
     }
-    /**
-     * stop()するときに実行するコールバック等を登録
-     * @param {Object} tar 
-     */
     pushFunc(tar) {
         return pushFunc.call(this, tar);
     }
-    /**
-     * pushFunc()で予約したコールバック等を削除する
-     * @param {Object} tar1 
-     * @param {Object} tar2 
-     */
     clearFunc(tar1, tar2) {
         return clearFunc.call(this, tar1, tar2);
     }
@@ -169,17 +150,24 @@ class PicoAudio {
         return startWebMIDI.call(this);
     }
 
-    /**
-     * パフォーマンス計測
-     */
-    measurePerformanceReverb() {
-        return PerformanceUtil.measureReverb.call(this);
-    }
-
     // インターフェース関係 //
     addEventListener(type, func) {
-        // type = EventName (play, stop, noteOn...)
+        // type = EventName (play, stop, noteOn, noteOff, songEnd)
         this.events.push({type: type, func: func});
+    }
+    removeEventListener(type, func) {
+        for (let i = this.events.length; i >= 0; i--) {
+            if (event.type == type && event.func === func) {
+                this.events.splice(i, 1);
+            }
+        }
+    }
+    removeAllEventListener(type) {
+        for (let i = this.events.length; i >= 0; i--) {
+            if (event.type == type) {
+                this.events.splice(i, 1);
+            }
+        }
     }
     fireEvent(type, option) {
         this.events.forEach((event) => {
@@ -192,52 +180,8 @@ class PicoAudio {
             }
         });
     }
-    getChannels() {
-        return this.channels;
-    }
-    setChannels(channels) {
-        channels.forEach((channel, idx) => {
-            this.channels[idx] = channel;
-        });
-    }
-    initChannels() {
-        for (let i=0; i<16; i++) {
-            this.channels[i] = [0,0,1];
-        }
-    }
-    getMasterVolume() {
-        return this.settings.masterVolume;
-    }
-    setMasterVolume(volume) {
-        this.settings.masterVolume = volume;
-        if (this.isStarted) {
-            this.masterGainNode.gain.value = this.settings.masterVolume;
-        }
-    }
-    isLoop() {
-        return this.settings.loop;
-    }
-    setLoop(loop) {
-        this.settings.loop = loop;
-    }
-    isWebMIDI() {
-        return this.settings.isWebMIDI;
-    }
-    setWebMIDI(enable) {
-        this.settings.isWebMIDI = enable;
-    }
-    isCC111() {
-        return this.settings.isCC111;
-    }
-    setCC111(enable) {
-        this.settings.isCC111 = enable;
-    }
-    setStartTime(offset) {
-        this.states.startTime -= offset;
-    }
-    setOnSongEndListener(listener) {
-        this.onSongEndListener = listener;
-    }
+
+    setOnSongEndListener(listener) { this.onSongEndListener = listener; }
     onSongEnd() {
         if (this.onSongEndListener) {
             const isStopFunc = this.onSongEndListener();
@@ -251,31 +195,38 @@ class PicoAudio {
             this.play(true);
         }
     }
-    isReverb() {
-        return this.settings.isReverb;
+    gethannels() { return this.channels; }
+    setChannels(channels) {
+        channels.forEach((channel, idx) => {
+            this.channels[idx] = channel;
+        });
     }
-    setReverb(enable) {
-        this.settings.isReverb = enable;
+    initChannels() {
+        for (let i=0; i<16; i++) {
+            this.channels[i] = [0,0,1];
+        }
     }
-    getReverbVolume() {
-        return this.settings.reverbVolume;
-    }
-    setReverbVolume(volume) {
-        this.settings.reverbVolume = volume;
-    }
-    isChorus() {
-        return this.settings.isChorus;
-    }
-    setChorus(enable) {
-        this.settings.isChorus = enable;
-    }
-    getChorusVolume() {
-        return this.settings.chorusVolume;
-    }
-    setChorusVolume(volume) {
-        this.settings.chorusVolume = volume;
-    }
+    getMasterVolume() { return this.settings.masterVolume; }
+    setMasterVolume(volume) {
+        this.settings.masterVolume = volume;
+        if (this.isStarted) {
+            this.masterGainNode.gain.value = this.settings.masterVolume;
+        }
+    } 
+    isLoop() { return this.settings.loop; }
+    setLoop(loop) { this.settings.loop = loop; }
+    isWebMIDI() { return this.settings.isWebMIDI; }
+    setWebMIDI(enable) { this.settings.isWebMIDI = enable; }
+    isCC111() { return this.settings.isCC111; }
+    setCC111(enable) { this.settings.isCC111 = enable; } 
+    isReverb() { return this.settings.isReverb; }
+    setReverb(enable) { this.settings.isReverb = enable; }
+    getReverbVolume() { return this.settings.reverbVolume; }
+    setReverbVolume(volume) { this.settings.reverbVolume = volume; }
+    isChorus() { return this.settings.isChorus; }
+    setChorus(enable) { this.settings.isChorus = enable; }
+    getChorusVolume() { return this.settings.chorusVolume; }
+    setChorusVolume(volume) { this.settings.chorusVolume = volume; }
 }
 
-// PicoAudioをグローバル変数に登録
-window.PicoAudio = PicoAudio;
+export default PicoAudio;
