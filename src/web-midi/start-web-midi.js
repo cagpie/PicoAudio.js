@@ -1,11 +1,10 @@
 export default function startWebMIDI() {
-    let outputs;
     if (!navigator.requestMIDIAccess) return;
     // 1回目：ブラウザにMIDIデバイスのフルコントロールを要求する(SysExの使用を要求)
     // 2回目：MIDIデバイスのフルコントロールがブロックされたら、SysEx無しでMIDIアクセスを要求する
     let sysEx = this.settings.WebMIDIPortSysEx;
     const midiAccessSuccess = (midiAccess) => {
-        outputs = midiAccess.outputs;
+        const outputs = midiAccess.outputs;
         this.settings.WebMIDIPortOutputs = outputs;
         let output;
         if (this.settings.WebMIDIPort==-1) {
@@ -13,7 +12,7 @@ export default function startWebMIDI() {
                 if (!output) output = o;
             });
         } else {
-            output = this.settings.WebMIDIPortOutputs.get(settings.WebMIDIPort);
+            output = this.settings.WebMIDIPortOutputs.get(this.settings.WebMIDIPort);
         }
         this.settings.WebMIDIPortOutput = output;
         this.settings.WebMIDIPortSysEx = sysEx;
@@ -36,7 +35,7 @@ export default function startWebMIDI() {
         .then(midiAccessSuccess)
         .catch(midiAccessFailure);
     // 終了時に鳴らしている音を切る
-    window.addEventListener('unload', (e) => {
+    window.addEventListener('unload', () => {
         for (let t=0; t<16; t++) {
             this.settings.WebMIDIPortOutput.send([0xB0+t, 120, 0]);
             for (let i=0; i<128; i++) {

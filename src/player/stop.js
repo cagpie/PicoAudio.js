@@ -1,5 +1,5 @@
 export default function stop(isSongLooping) {
-    let states = this.states;
+    const states = this.states;
 
     // 再生していない場合、何もしない //
     if (states.isPlaying == false) return;

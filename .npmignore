@@ -1,0 +1,5 @@
+/dist/browser
+/sample
+/src
+*.map
+rollup.config.js

@@ -22,7 +22,7 @@ export default class RandomUtil {
      */
     static random() {
         if (!this.init) this.resetSeed();
-        let t = this.x ^ (this.x << 11);
+        const t = this.x ^ (this.x << 11);
         this.x = this.y; this.y = this.z; this.z = this.w;
         let r = this.w = (this.w ^ (this.w >>> 19)) ^ (t ^ (t >>> 8));
         r = Math.abs(r) / 2147483648 % 2;

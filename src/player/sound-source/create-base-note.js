@@ -3,6 +3,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
     const settings = this.settings;
     const context = this.context;
     const songStartTime = this.states.startTime;
+    const baseLatency = this.baseLatency;
     const channel = nonChannel ? 0 : (option.channel || 0);
     const velocity = (option.velocity) * Number(nonChannel ? 1 : (this.channels[channel][2] != null ? this.channels[channel][2] : 1)) * settings.generateVolume;
     let isGainValueZero = true;
@@ -16,12 +17,11 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
     expGainNode.gain.value = expGainValue;
     if (isExpression) {
         option.expression ? option.expression.forEach((p) => {
-            let v = velocity * (p.value / 127);
+            const v = velocity * (p.value / 127);
             if (v > 0) isGainValueZero = false;
-            expGainNode.gain.setValueAtTime(
-                v,
-                p.time + songStartTime
-            );
+            let t = p.time + songStartTime + baseLatency;
+            if (t < 0) t = 0;
+            expGainNode.gain.setValueAtTime(v, t);
         }) : false;
     } else {
         if (expGainValue > 0) {
@@ -35,8 +35,8 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
     }
 
     // 全ての変数を準備 //
-    const start = option.startTime + songStartTime;
-    const stop = option.stopTime + songStartTime;
+    const start = option.startTime + songStartTime + baseLatency;
+    const stop = option.stopTime + songStartTime + baseLatency;
     const pitch = settings.basePitch * Math.pow(Math.pow(2, 1/12), (option.pitch || 69) - 69);
     const oscillator = !isDrum ? context.createOscillator() : context.createBufferSource();
     const panNode = context.createStereoPanner ? context.createStereoPanner()
@@ -52,9 +52,11 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
         oscillator.detune.value = 0;
         oscillator.frequency.value = pitch;
         option.pitchBend ? option.pitchBend.forEach((p) => {
+            let t = p.time + songStartTime + baseLatency;
+            if (t < 0) t = 0;
             oscillator.frequency.setValueAtTime(
                 settings.basePitch * Math.pow(Math.pow(2, 1/12), option.pitch - 69 + p.value),
-                p.time + songStartTime
+                t
             );
         }) : false;
     } else {
@@ -79,16 +81,16 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                 }
                 let v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
                 if (v > 1.0) v = 1.0;
-                panNode.pan.setValueAtTime(
-                    v,
-                    p.time + songStartTime
-                );
+                let t = p.time + songStartTime + baseLatency;
+                if (t < 0) t = 0;
+                panNode.pan.setValueAtTime(v, t);
             }) : false;
         } else if (context.createPanner) {
             // StereoPannerNode が未サポート、PannerNode が使える
             if (panNode.positionX) {
                 // setValueAtTimeが使える
                 // Old Browser
+                let firstPan = true;
                 option.pan ? option.pan.forEach((p) => {
                     if (firstPan) {
                         firstPan = false;
@@ -96,9 +98,11 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                     }
                     const v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
                     const posObj = convPosition(v);
-                    panNode.positionX.setValueAtTime(posObj.x, p.time + songStartTime);
-                    panNode.positionY.setValueAtTime(posObj.y, p.time + songStartTime);
-                    panNode.positionZ.setValueAtTime(posObj.z, p.time + songStartTime);
+                    let t = p.time + songStartTime + baseLatency;
+                    if (t < 0) t = 0;
+                    panNode.positionX.setValueAtTime(posObj.x, t);
+                    panNode.positionY.setValueAtTime(posObj.y, t);
+                    panNode.positionZ.setValueAtTime(posObj.z, t);
                 }) : false;
             } else {
                 // iOS
@@ -112,9 +116,9 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                         this.clearFunc("pan", reservePan);
                         let v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
                         if (v > 1.0) v = 1.0;
-                        let posObj = convPosition(v);
+                        const posObj = convPosition(v);
                         panNode.setPosition(posObj.x, posObj.y, posObj.z);
-                    }, (p.time + songStartTime - context.currentTime) * 1000);
+                    }, (p.time + songStartTime + baseLatency - context.currentTime) * 1000);
                     this.pushFunc({
                         pan: reservePan,
                         stopFunc: () => { clearTimeout(reservePan); }
@@ -149,9 +153,11 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
             }
             let m = p.value / 127;
             if (m > 1.0) m = 1.0;
+            let t = p.time + songStartTime + baseLatency;
+            if (t < 0) t = 0;
             modulationGainNode.gain.setValueAtTime(
                 pitch * 10 / 440 * m,
-                p.time + songStartTime
+                t
             );
         }) : false;
         let m = option.modulation ? option.modulation[0].value / 127 : 0;
@@ -174,10 +180,9 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
             }
             let r = p.value / 127;
             if (r > 1.0) r = 1.0;
-            convolverGainNode.gain.setValueAtTime(
-                r,
-                p.time + songStartTime
-            );
+            let t = p.time + songStartTime + baseLatency;
+            if (t < 0) t = 0;
+            convolverGainNode.gain.setValueAtTime(r, t);
         }) : false;
         let r = option.reverb ? option.reverb[0].value / 127 : 0;
         if (r > 1.0) r = 1.0;
@@ -199,10 +204,9 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
             }
             let c = p.value / 127;
             if (c > 1.0) c = 1.0;
-            chorusGainNode.gain.setValueAtTime(
-                c,
-                p.time + songStartTime
-            );
+            let t = p.time + songStartTime + baseLatency;
+            if (t < 0) t = 0;
+            chorusGainNode.gain.setValueAtTime(c, t);
         }) : false;
         let c = option.chorus ? option.chorus[0].value / 127 : 0;
         if (c > 1.0) c = 1.0;

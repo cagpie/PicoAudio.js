@@ -1,5 +1,5 @@
 export default function stopAudioNode(tar, time, stopGainNode, isNoiseCut) {
-    let isImmed = time <= this.context.currentTime; // 即時ストップか？
+    const isImmed = time <= this.context.currentTime; // 即時ストップか？
 
     // 予約ストップ //
     let vol1Time = time-0.005;

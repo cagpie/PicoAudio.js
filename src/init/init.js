@@ -1,13 +1,16 @@
 import RandomUtil from '../util/random-util.js';
 import InterpolationUtil from '../util/interpolation-util.js';
 
-export default function init(_audioContext, _picoAudio) {
+export default function init(argsObj) {
     if (this.isStarted) return;
     this.isStarted = true;
 
+    const audioContext = argsObj && argsObj.audioContext;
+    const picoAudio = argsObj && argsObj.picoAudio;
+
     // AudioContextを生成 //
-    let AudioContext = window.AudioContext || window.webkitAudioContext;
-    this.context = _audioContext ? _audioContext : new AudioContext();
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    this.context = audioContext ? audioContext : new AudioContext();
 
     // マスターボリューム //
     // リアルタイムで音量変更するためにdestination前にgainNodeを一つ噛ませる
@@ -19,8 +22,8 @@ export default function init(_audioContext, _picoAudio) {
     const sampleRateVT = sampleRate >= 48000 ? 48000 : sampleRate;
 
     // ホワイトノイズ //
-    if (_picoAudio && _picoAudio.whitenoise) { // 使いまわし
-        this.whitenoise = _picoAudio.whitenoise;
+    if (picoAudio && picoAudio.whitenoise) { // 使いまわし
+        this.whitenoise = picoAudio.whitenoise;
     } else {
         RandomUtil.resetSeed(); // 乱数パターンを固定にする（Math.random()を使わない）
         // 再生環境のサンプルレートによって音が変わってしまうので //
@@ -33,7 +36,7 @@ export default function init(_audioContext, _picoAudio) {
             vtBufs.push(new Float32Array(sampleLengthVT));
             const vtBuf = vtBufs[ch];
             for (let i=0; i<sampleLengthVT; i++) {
-                let r = RandomUtil.random();
+                const r = RandomUtil.random();
                 vtBuf[i] = r * 2 - 1;
             }
         }
@@ -43,8 +46,8 @@ export default function init(_audioContext, _picoAudio) {
     }
 
     // リバーブ用のインパルス応答音声データ作成（てきとう） //
-    if (_picoAudio && _picoAudio.impulseResponse) { // 使いまわし
-        this.impulseResponse = _picoAudio.impulseResponse;
+    if (picoAudio && picoAudio.impulseResponse) { // 使いまわし
+        this.impulseResponse = picoAudio.impulseResponse;
     } else {
         RandomUtil.resetSeed(); // 乱数パターンを固定にする（Math.random()を使わない）
         // 再生環境のサンプルレートによって音が変わってしまうので //
@@ -57,9 +60,9 @@ export default function init(_audioContext, _picoAudio) {
             vtBufs.push(new Float32Array(sampleLengthVT));
             const vtBuf = vtBufs[ch];
             for (let i=0; i<sampleLengthVT; i++) {
-                let v = ((sampleLengthVT - i) / sampleLengthVT);
-                let s = i / sampleRateVT;
-                let d = (s < 0.030 ? 0 : v)
+                const v = ((sampleLengthVT - i) / sampleLengthVT);
+                const s = i / sampleRateVT;
+                const d = (s < 0.030 ? 0 : v)
                     * (s >= 0.030 && s < 0.031 ? v*2 : v)
                     * (s >= 0.040 && s < 0.042 ? v*1.5 : v)
                     * (s >= 0.050 && s < 0.054 ? v*1.25 : v)
@@ -97,13 +100,10 @@ export default function init(_audioContext, _picoAudio) {
     this.chorusGainNode.connect(this.masterGainNode);
     this.masterGainNode.connect(this.context.destination);
     this.chorusOscillator.start(0);
-    
-    // リバーブON/OFF設定を引き継ぐ。未設定ならパフォーマンス計測する(Tonyu2用)
-    if (this.isTonyu2) {
-        if (_picoAudio) {
-            this.settings.isReverb = _picoAudio.settings.isReverb;
-        } else {
-            this.settings.isReverb = this.measurePerformanceReverb();
-        }
+
+    // レイテンシの設定 //
+    this.baseLatency = this.context.baseLatency || this.baseLatency;
+    if (this.settings.baseLatency != -1) {
+        this.baseLatency = this.settings.baseLatency;
     }
 }

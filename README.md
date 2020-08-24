@@ -16,7 +16,6 @@ MIDIをブラウザで再生するためのJavaScriptライブラリです。
 var picoAudio = new PicoAudio();
 picoAudio.init();
 ```
-※GoogleChromeの仕様変更により、init()メソッドを呼び出すタイミングはユーザのタッチ操作に制限される可能性があります。
 
 **再生**
 ```javascript
@@ -26,6 +25,7 @@ var parseData = picoAudio.parseSMF(smfData);
 picoAudio.setData(parseData);
 picoAudio.play();
 ```
+※GoogleChromeの仕様変更により、play()メソッドを呼び出すタイミングはユーザのタッチ操作に制限される可能性があります。
 
 **停止**
 ```javascript

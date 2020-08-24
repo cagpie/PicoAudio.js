@@ -42,7 +42,7 @@ export default class ParseUtil {
      * @param {number} len MIDIイベントの長さ
      */
     static chIndicesInsert(that, ch, time, p, len) {
-        let indices = ch.indices;
+        const indices = ch.indices;
 
         // デルタタイムの順番になるようにリスト配列に挿入 //
         if (ch.indicesLength >= 4 && time < indices[ch.indicesFoot]) {

@@ -1,6 +1,8 @@
+import {Performance} from '../util/ponyfill.js';
+
 export default function setData(data) {
     if (this.debug) {
-        var syoriTimeS = performance.now();
+        var syoriTimeS = Performance.now();
     }
 
     if (this.states.isPlaying) this.stop();
@@ -17,7 +19,7 @@ export default function setData(data) {
     this.initStatus();
 
     if (this.debug) {
-        const syoriTimeE = performance.now();
+        const syoriTimeE = Performance.now();
         console.log("setData time", syoriTimeE - syoriTimeS);
     }
 
