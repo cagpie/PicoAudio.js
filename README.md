@@ -2,10 +2,10 @@
 
 ## PicoAudio.jsについて
 
-Web上でMIDI(Standard MIDI File=SMF)を再生するためのJavaScriptライブラリです。
+Web上でMIDI(Standard MIDI File=SMF)を再生するためのJavaScriptライブラリです。<br>
 SMF形式のバイナリのパースや、Web Audio API を用いた楽曲の再生ができます。
 
-Web Audio API から提供される数種の音源を組み合わせて、8bitサウンドで演奏を行います。
+Web Audio API から提供される数種の音源を組み合わせて、8bitサウンドで演奏を行います。<br>
 また、別途音源の準備をする必要がなく、WebとSMFを組み合わせた開発がすぐに始められます！
 
 
