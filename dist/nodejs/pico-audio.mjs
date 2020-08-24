@@ -901,6 +901,7 @@ function stop(isSongLooping) {
 
     // 停止をコールバックに通知 //
     this.trigger.stop();
+    this.fireEvent('pause');
     this.fireEvent('stop');
 }
 
@@ -3121,7 +3122,7 @@ function startWebMIDI() {
 class PicoAudio {
     /**
      * PicoAudioクラスのコンストラクタ
-     * @param {Object} argsObj 
+     * @param {Object} argsObj
      */
     constructor(argsObj) {
         picoAudioConstructor.call(this, argsObj);
@@ -3129,12 +3130,12 @@ class PicoAudio {
 
     /**
      * 初期化・準備
-     * @param {Object} argsObj 
+     * @param {Object} argsObj
      */
     init(argsObj) {
         return init.call(this, argsObj);
     }
-    
+
     /**
      * MIDIファイル(SMF)を解析する
      * @param {Uint8Array} smf MIDIファイルの内容が入ったUint8Arrayオブジェクト
@@ -3158,6 +3159,14 @@ class PicoAudio {
      */
     play(_isSongLooping) {
         return play.call(this, _isSongLooping);
+    }
+
+    /**
+     * 一時停止
+     * @param {boolean} _isSongLooping PicoAudio内部で使う引数
+     */
+    pause(_isSongLooping) {
+        return stop.call(this, _isSongLooping);
     }
 
     /**
@@ -3202,11 +3211,11 @@ class PicoAudio {
     // 再生・音源関係 //
     /**
      * 再生処理（Web Audio API の oscillator等で音を鳴らす）
-     * @param {Object} option 
-     * @param {boolean} isDrum 
-     * @param {boolean} isExpression 
-     * @param {boolean} nonChannel 
-     * @param {boolean} nonStop 
+     * @param {Object} option
+     * @param {boolean} isDrum
+     * @param {boolean} isExpression
+     * @param {boolean} nonChannel
+     * @param {boolean} nonStop
      * @returns {Object} AudioNodeやパラメータを返す
      */
     createBaseNote(option, isDrum, isExpression, nonChannel, nonStop) {
@@ -3214,7 +3223,7 @@ class PicoAudio {
     }
     /**
      * 音源（パーカッション以外）
-     * @param {Object} option 
+     * @param {Object} option
      * @returns {Object} 音をストップさせる関数を返す
      */
     createNote(option) {
@@ -3222,7 +3231,7 @@ class PicoAudio {
     }
     /**
      * パーカッション音源
-     * @param {Object} option 
+     * @param {Object} option
      * @returns {Object} 音をストップさせる関数を返す
      */
     createPercussionNote(option) {
@@ -3309,13 +3318,13 @@ class PicoAudio {
         if (this.isStarted) {
             this.masterGainNode.gain.value = this.settings.masterVolume;
         }
-    } 
+    }
     isLoop() { return this.settings.loop; }
     setLoop(loop) { this.settings.loop = loop; }
     isWebMIDI() { return this.settings.isWebMIDI; }
     setWebMIDI(enable) { this.settings.isWebMIDI = enable; }
     isCC111() { return this.settings.isCC111; }
-    setCC111(enable) { this.settings.isCC111 = enable; } 
+    setCC111(enable) { this.settings.isCC111 = enable; }
     isReverb() { return this.settings.isReverb; }
     setReverb(enable) { this.settings.isReverb = enable; }
     getReverbVolume() { return this.settings.reverbVolume; }
