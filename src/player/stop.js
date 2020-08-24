@@ -33,5 +33,6 @@ export default function stop(isSongLooping) {
 
     // 停止をコールバックに通知 //
     this.trigger.stop();
+    this.fireEvent('pause');
     this.fireEvent('stop');
 }

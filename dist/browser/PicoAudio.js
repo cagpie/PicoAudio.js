@@ -1220,6 +1220,7 @@ var PicoAudio = (function () {
 
 
     this.trigger.stop();
+    this.fireEvent('pause');
     this.fireEvent('stop');
   }
 
@@ -3836,7 +3837,7 @@ var PicoAudio = (function () {
   var PicoAudio = /*#__PURE__*/function () {
     /**
      * PicoAudioクラスのコンストラクタ
-     * @param {Object} argsObj 
+     * @param {Object} argsObj
      */
     function PicoAudio(argsObj) {
       _classCallCheck(this, PicoAudio);
@@ -3845,7 +3846,7 @@ var PicoAudio = (function () {
     }
     /**
      * 初期化・準備
-     * @param {Object} argsObj 
+     * @param {Object} argsObj
      */
 
 
@@ -3884,6 +3885,16 @@ var PicoAudio = (function () {
       key: "play",
       value: function play$1(_isSongLooping) {
         return play.call(this, _isSongLooping);
+      }
+      /**
+       * 一時停止
+       * @param {boolean} _isSongLooping PicoAudio内部で使う引数
+       */
+
+    }, {
+      key: "pause",
+      value: function pause(_isSongLooping) {
+        return stop.call(this, _isSongLooping);
       }
       /**
        * 停止
@@ -3937,11 +3948,11 @@ var PicoAudio = (function () {
 
       /**
        * 再生処理（Web Audio API の oscillator等で音を鳴らす）
-       * @param {Object} option 
-       * @param {boolean} isDrum 
-       * @param {boolean} isExpression 
-       * @param {boolean} nonChannel 
-       * @param {boolean} nonStop 
+       * @param {Object} option
+       * @param {boolean} isDrum
+       * @param {boolean} isExpression
+       * @param {boolean} nonChannel
+       * @param {boolean} nonStop
        * @returns {Object} AudioNodeやパラメータを返す
        */
 
@@ -3952,7 +3963,7 @@ var PicoAudio = (function () {
       }
       /**
        * 音源（パーカッション以外）
-       * @param {Object} option 
+       * @param {Object} option
        * @returns {Object} 音をストップさせる関数を返す
        */
 
@@ -3963,7 +3974,7 @@ var PicoAudio = (function () {
       }
       /**
        * パーカッション音源
-       * @param {Object} option 
+       * @param {Object} option
        * @returns {Object} 音をストップさせる関数を返す
        */
 

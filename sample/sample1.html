@@ -32,7 +32,7 @@
                 <dt>楽曲再生</dt>
                 <dd><button id="play-button">Play</button></dd>
                 <dt>楽曲停止</dt>
-                <dd><button id="stop-button">Stop</button></dd>
+                <dd><button id="pause-button">Pause</button></dd>
                 <dt>音量調整</dt>
                 <dd><input type="range" id="volume-range" min="0" max="1" step="0.1"></dd>
             </dl>
@@ -68,10 +68,10 @@
         });
 
         // 停止
-        const stopButtonElem = document.getElementById('stop-button');
-        stopButtonElem.addEventListener('click', () => {
+        const pauseButtonElem = document.getElementById('pause-button');
+        pauseButtonElem.addEventListener('click', () => {
             picoAudio.init();
-            picoAudio.stop();
+            picoAudio.pause();
         });
 
         const volumeRangeElem = document.getElementById('volume-range');
@@ -86,8 +86,8 @@
         });
 
         // イベント - 再生停止
-        picoAudio.addEventListener('stop', () => {
-            pushLog('stop', '#008');
+        picoAudio.addEventListener('pause', () => {
+            pushLog('pause', '#008');
         });
 
         // イベント - 楽曲終了

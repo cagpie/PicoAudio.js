@@ -54,8 +54,8 @@ picoAudio.play();
 
 ### 停止
 ```javascript
-// 停止
-picoAudio.stop();
+// 一時停止
+picoAudio.pause();
 ```
 
 
@@ -93,10 +93,10 @@ PicoAudio.setData(parsedSMF: ParsedSMF): void
 PicoAudio.play(isLoop: boolean): void
 ```
 
-#### PicoAudio.stop
+#### PicoAudio.pause
 ```typescript
-// 楽曲の停止
-PicoAudio.stop(): void
+// 楽曲の一時停止
+PicoAudio.pause(): void
 ```
 
 #### PicoAudio.initStatus
@@ -154,7 +154,7 @@ PicoAudio.setCC111(enable: boolean): void
 ```typeScript
 // イベントリスナを登録
 PicoAudio.addEventListener(
-  type: <'play' | 'stop' | 'noteOn' | 'noteOff' | 'songEnd'>,
+  type: <'play' | 'pause' | 'noteOn' | 'noteOff' | 'songEnd'>,
   listener: Function
 ): void
 ```
@@ -209,7 +209,7 @@ PicoAudio.addEventListener(
 ```typescript
 // 指定のイベントリスナを解除
 PicoAudio.removeEventListener(
-  type: <'play' | 'stop' | 'noteOn' | 'noteOff' | 'songEnd'>,
+  type: <'play' | 'pause' | 'noteOn' | 'noteOff' | 'songEnd'>,
   listener: Function
 ): void
 ```
@@ -218,7 +218,7 @@ PicoAudio.removeEventListener(
 ```typescript
 // 指定typeのイベントリスナをすべて解除
 PicoAudio.removeAllEventListener(
-  type: <'play' | 'stop' | 'noteOn' | 'noteOff' | 'songEnd'>
+  type: <'play' | 'pause' | 'noteOn' | 'noteOff' | 'songEnd'>
 ): void
 ```
 
