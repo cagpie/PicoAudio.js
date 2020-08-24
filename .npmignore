@@ -1,5 +1,5 @@
-/dist/browser
-/sample
-/src
+node_modules
+sample
+src
 *.map
 rollup.config.js
