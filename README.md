@@ -21,6 +21,11 @@ Web Audio API から提供される数種の音源を組み合わせて、8bit�
 - [Tonyu System 2](https://www.tonyu.jp/Tonyu2.php) by @hoge1e3
 
 
+## サンプル
+
+- [Sample1](https://cagpie.github.io/PicoAudio.js/sample/cdn-sample1.html)
+- [Sample2](https://cagpie.github.io/PicoAudio.js/sample/cdn-sample2.html)
+
 ## 導入方法
 
 ### Browser
