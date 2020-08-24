@@ -223,9 +223,9 @@ PicoAudio.removeAllEventListener(
 ```
 
 ### SMFパース周辺
-#### parsed SMF 型
+#### parsed SMF
 ```typescript
-
+// 準備中
 ```
 
 ##### 変換関数
