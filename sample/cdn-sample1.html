@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<title>PicoAudio.js - Sample 1</title>
+<script src="https://unpkg.com/pico-audio-js/dist/browser/PicoAudio.js"></script>
+<style>
+    #log-area {
+        height: 300px;
+        overflow-y: scroll;
+    }
+
+    #log-area dt {
+        float: left;
+        width: 5em;
+    }
+</style>
+</head>
+<body>
+    <main>
+        <h1>PicoAudio.js Sample 1</h1>
+        <section>
+            <h2>読み込み</h2>
+            <dl>
+                <dt>MIDIファイル読み込み</dt>
+                <dd><input type="file" id="midi-file" accept="audio/midi"></dd>
+            </dl>
+        </section>
+        <section>
+            <h2>操作</h2>
+            <dl>
+                <dt>楽曲再生</dt>
+                <dd><button id="play-button">Play</button></dd>
+                <dt>楽曲停止</dt>
+                <dd><button id="pause-button">Pause</button></dd>
+                <dt>音量調整</dt>
+                <dd><input type="range" id="volume-range" min="0" max="1" step="0.1"></dd>
+            </dl>
+            </li>
+        </section>
+        <section>
+            <h2>ログ</h2>
+            <dl id="log-area">
+            </dl>
+        </section>
+    </main>
+    <script>
+        const picoAudio = new PicoAudio();
+
+        // ファイル読み込み部分
+        const fileInputElem = document.getElementById('midi-file');
+        fileInputElem.addEventListener('change', () => {
+            const file = fileInputElem.files[0];
+            const reader = new FileReader();
+            reader.onload = () => {
+                const smf = new Uint8Array(reader.result);
+                const data = picoAudio.parseSMF(smf);
+                picoAudio.setData(data);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // 再生
+        const playButtonElem = document.getElementById('play-button');
+        playButtonElem.addEventListener('click', () => {
+            picoAudio.init();
+            picoAudio.play();
+        });
+
+        // 停止
+        const pauseButtonElem = document.getElementById('pause-button');
+        pauseButtonElem.addEventListener('click', () => {
+            picoAudio.init();
+            picoAudio.pause();
+        });
+
+        const volumeRangeElem = document.getElementById('volume-range');
+        volumeRangeElem.addEventListener('input', () => {
+            picoAudio.init();
+            picoAudio.setMasterVolume(volumeRangeElem.value);
+        });
+
+        // イベント - 再生開始
+        picoAudio.addEventListener('play', () => {
+            pushLog('play', '#008');
+        });
+
+        // イベント - 再生停止
+        picoAudio.addEventListener('pause', () => {
+            pushLog('pause', '#008');
+        });
+
+        // イベント - 楽曲終了
+        picoAudio.addEventListener('songEnd', () => {
+            pushLog('songEnd', '#008');
+        });
+
+        // イベント - ノートオン
+        picoAudio.addEventListener('noteOn', (e) => {
+            pushLog(`noteOn - channel: ${e.channel}, instrument: ${e.instrument}, pitch: ${e.pitch}`, '#f88');
+            console.log(e)
+        });
+
+        // イベント - ノートオフ
+        picoAudio.addEventListener('noteOff', () => {
+            pushLog('noteOff', '#f88');
+        });
+
+        // ===============================
+        // ログ記録用
+        const logAreaElem = document.getElementById('log-area');
+        function pushLog(messageHTML, color) {
+            const div = document.createElement('div');
+
+            const dt = document.createElement('dt');
+            dt.innerHTML = `${picoAudio.context.currentTime + 0.00001}`.slice(0, 6);
+
+            const dd = document.createElement('dd');
+            dd.innerHTML = `<span style="color: ${color}">${messageHTML}</span>`;
+
+            div.appendChild(dt);
+            div.appendChild(dd);
+
+            logAreaElem.insertBefore(div, logAreaElem.firstElementChild);
+            if (logAreaElem.childElementCount > 100) {
+                logAreaElem.removeChild(logAreaElem.lastElementChild);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <script src="https://unpkg.com/pico-audio-js/dist/browser/PicoAudio.js"></script>
+    </head>
+    <body>
+        <input type="file" id="file"/><br>
+        <button id="play">play</button>
+        <button id="pause">pause</button>
+        <button id="stop">stop</button>
+        <script>
+            // pAudio = new PicoAudio(); // release
+            var pAudio = new PicoAudio({debug: true}); // debug
+            pAudio.init();
+            document.getElementById('file').addEventListener("change", function() {
+                var files = document.getElementById('file').files;
+                if (!files || files.length <= 0) return;
+                var file = files[0];
+                var fileReader = new FileReader();
+                fileReader.onload = function(e) {
+                    var smfData = new Uint8Array(fileReader.result);
+                    pAudio.initStatus();
+                    var parseData = pAudio.parseSMF(smfData);
+                    pAudio.setData(parseData);
+                }
+                fileReader.readAsArrayBuffer(file);
+            });
+
+            document.getElementById('play').addEventListener("click", function() {
+                pAudio.play();
+            });
+
+            document.getElementById('pause').addEventListener("click", function() {
+                pAudio.pause();
+            });
+
+            document.getElementById('stop').addEventListener("click", function() {
+                pAudio.initStatus();
+            });
+        </script>
+    </body>
+</html>
