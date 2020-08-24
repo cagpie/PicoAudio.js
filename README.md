@@ -22,7 +22,21 @@ Web Audio API から提供される数種の音源を組み合わせて、8bit�
 
 
 ## 導入方法
-準備中
+
+### Browser
+```html
+<script src="https://unpkg.com/pico-audio-js/dist/browser/PicoAudio.js"></script>
+または、
+<script src="https://unpkg.com/pico-audio-js/dist/browser/PicoAudio.min.js"></script>
+```
+※ グローバル変数に `PicoAudio` が定義されます
+
+
+### Module
+```bash
+$ npm install pico-audio-js
+```
+
 
 ## はじめ方
 
