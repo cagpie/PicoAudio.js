@@ -246,6 +246,6 @@ PicoAudio.getTiming(time: number): number
 Code released under the MIT License
 
 
-## Contributers
+## Contributors
 - [cagpie](https://github.com/cagpie)
 - [makkii_bcr](https://github.com/makkii-bcr)
