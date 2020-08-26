@@ -188,7 +188,7 @@ PicoAudio.addEventListener(
 ): void
 
 type NoteEvent = {
-  channel: number, // チャンネル(1-16)
+  channel: number, // チャンネル(0-15)
   instrument: number, // 楽器の種類(0-127)
 
   start: number, // 音の始まりのタイミング(tick=SMF時間)
