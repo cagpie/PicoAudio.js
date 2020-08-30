@@ -7,7 +7,7 @@
   "scripts": {
     "build": "rollup -c",
     "build:map": "rollup -cm",
-    "watch": "rollup -cmw --environment WATCH",
+    "watch": "rollup -mw -c watch.rollup.config.js",
     "lint": "eslint src"
   },
   "repository": {

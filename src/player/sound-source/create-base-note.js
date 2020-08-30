@@ -19,8 +19,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
         option.expression ? option.expression.forEach((p) => {
             const v = velocity * (p.value / 127);
             if (v > 0) isGainValueZero = false;
-            let t = p.time + songStartTime + baseLatency;
-            if (t < 0) t = 0;
+            const t = Math.max(0, p.time + songStartTime + baseLatency);
             expGainNode.gain.setValueAtTime(v, t);
         }) : false;
     } else {
@@ -52,8 +51,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
         oscillator.detune.value = 0;
         oscillator.frequency.value = pitch;
         option.pitchBend ? option.pitchBend.forEach((p) => {
-            let t = p.time + songStartTime + baseLatency;
-            if (t < 0) t = 0;
+            const t = Math.max(0, p.time + songStartTime + baseLatency);
             oscillator.frequency.setValueAtTime(
                 settings.basePitch * Math.pow(Math.pow(2, 1/12), option.pitch - 69 + p.value),
                 t
@@ -79,10 +77,8 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                     firstNode = false;
                     return;
                 }
-                let v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
-                if (v > 1.0) v = 1.0;
-                let t = p.time + songStartTime + baseLatency;
-                if (t < 0) t = 0;
+                const v = Math.min(1.0, p.value == 64 ? 0 : (p.value / 127) * 2 - 1);
+                const t = Math.max(0, p.time + songStartTime + baseLatency);
                 panNode.pan.setValueAtTime(v, t);
             }) : false;
         } else if (context.createPanner) {
@@ -98,8 +94,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                     }
                     const v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
                     const posObj = convPosition(v);
-                    let t = p.time + songStartTime + baseLatency;
-                    if (t < 0) t = 0;
+                    const t = Math.max(0, p.time + songStartTime + baseLatency);
                     panNode.positionX.setValueAtTime(posObj.x, t);
                     panNode.positionY.setValueAtTime(posObj.y, t);
                     panNode.positionZ.setValueAtTime(posObj.z, t);
@@ -114,8 +109,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                     }
                     const reservePan = setTimeout(() => {
                         this.clearFunc("pan", reservePan);
-                        let v = p.value == 64 ? 0 : (p.value / 127) * 2 - 1;
-                        if (v > 1.0) v = 1.0;
+                        const v = Math.min(1.0, p.value == 64 ? 0 : (p.value / 127) * 2 - 1);
                         const posObj = convPosition(v);
                         panNode.setPosition(posObj.x, posObj.y, posObj.z);
                     }, (p.time + songStartTime + baseLatency - context.currentTime) * 1000);
@@ -151,17 +145,14 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                 firstNode = false;
                 return;
             }
-            let m = p.value / 127;
-            if (m > 1.0) m = 1.0;
-            let t = p.time + songStartTime + baseLatency;
-            if (t < 0) t = 0;
+            const m = Math.min(1.0, p.value / 127);
+            const t = Math.max(0, p.time + songStartTime + baseLatency);
             modulationGainNode.gain.setValueAtTime(
                 pitch * 10 / 440 * m,
                 t
             );
         }) : false;
-        let m = option.modulation ? option.modulation[0].value / 127 : 0;
-        if (m > 1.0) m = 1.0;
+        const m = Math.min(1.0, option.modulation ? option.modulation[0].value / 127 : 0);
         modulationGainNode.gain.value = pitch * 10 / 440 * m;
         modulationOscillator.frequency.value = 6;
         modulationOscillator.connect(modulationGainNode);
@@ -178,14 +169,11 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                 firstNode = false;
                 return;
             }
-            let r = p.value / 127;
-            if (r > 1.0) r = 1.0;
-            let t = p.time + songStartTime + baseLatency;
-            if (t < 0) t = 0;
+            const r = Math.min(1.0, p.value / 127);
+            const t = Math.max(0, p.time + songStartTime + baseLatency);
             convolverGainNode.gain.setValueAtTime(r, t);
         }) : false;
-        let r = option.reverb ? option.reverb[0].value / 127 : 0;
-        if (r > 1.0) r = 1.0;
+        const r = Math.min(1.0, option.reverb ? option.reverb[0].value / 127 : 0);
         convolverGainNode.gain.value = r;
         gainNode.connect(stopGainNode);
         stopGainNode.connect(convolverGainNode);
@@ -202,14 +190,11 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
                 firstNode = false;
                 return;
             }
-            let c = p.value / 127;
-            if (c > 1.0) c = 1.0;
-            let t = p.time + songStartTime + baseLatency;
-            if (t < 0) t = 0;
+            const c = Math.min(1.0, p.value / 127);
+            const t = Math.max(0, p.time + songStartTime + baseLatency);
             chorusGainNode.gain.setValueAtTime(c, t);
         }) : false;
-        let c = option.chorus ? option.chorus[0].value / 127 : 0;
-        if (c > 1.0) c = 1.0;
+        let c = Math.min(1.0, option.chorus ? option.chorus[0].value / 127 : 0);
         chorusGainNode.gain.value = c;
         gainNode.connect(stopGainNode);
         stopGainNode.connect(chorusGainNode);
@@ -250,7 +235,7 @@ export default function createBaseNote(option, isDrum, isExpression, nonChannel,
  */
 function initPanValue(context, panNode, panValue) {
     if (context.createStereoPanner) {
-        if(panValue > 1.0) panValue = 1.0;
+        if (panValue > 1.0) panValue = 1.0;
         panNode.pan.value = panValue;
     } else if(context.createPanner) {
         // iOS, Old Browser
