@@ -34,13 +34,13 @@ export default [
     input: 'src/main.js',
     output: [
       {
-        file: 'dist/nodejs/pico-audio.js',
+        file: 'dist/nodejs/picoaudio.js',
         format: 'cjs',
         name: 'PicoAudio',
         exports: 'default'
       },
       {
-        file: 'dist/nodejs/pico-audio.mjs',
+        file: 'dist/nodejs/picoaudio.mjs',
         format: 'esm'
       }
     ]

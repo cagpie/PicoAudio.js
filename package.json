@@ -2,8 +2,8 @@
   "name": "picoaudio",
   "version": "1.0.1",
   "description": "PicoAudio.js is light MIDI player using Web Audio API",
-  "main": "dist/nodejs/pico-audio.js",
-  "module": "dist/nodejs/pico-audio.mjs",
+  "main": "dist/nodejs/picoaudio.js",
+  "module": "dist/nodejs/picoaudio.mjs",
   "files": [
     "dist/**/*.js",
     "dist/**/*.mjs"
