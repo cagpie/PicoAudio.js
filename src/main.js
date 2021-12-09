@@ -203,7 +203,7 @@ class PicoAudio {
             this.play(true);
         }
     }
-    gethannels() { return this.channels; }
+    getChannels() { return this.channels; }
     setChannels(channels) {
         channels.forEach((channel, idx) => {
             this.channels[idx] = channel;
