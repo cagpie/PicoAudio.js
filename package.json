@@ -1,6 +1,6 @@
 {
   "name": "picoaudio",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "PicoAudio.js is light MIDI player using Web Audio API",
   "main": "dist/nodejs/picoaudio.js",
   "module": "dist/nodejs/picoaudio.mjs",
@@ -38,7 +38,7 @@
     "@babel/preset-env": "^7.11.0",
     "@rollup/plugin-babel": "^5.1.0",
     "core-js": "^3.6.5",
-    "eslint": "^7.6.0",
+    "eslint": "^8.4.1",
     "rollup": "^2.23.1",
     "rollup-plugin-livereload": "^1.3.0",
     "rollup-plugin-serve": "^1.0.3",

@@ -6,13 +6,18 @@ Web上でMIDI(Standard MIDI File=SMF)を再生するためのJavaScriptライブ
 SMF形式のバイナリのパースや、Web Audio API を用いた楽曲の再生ができます。
 
 Web Audio API から提供される数種の音源を組み合わせて、8bitサウンドで演奏を行います。<br>
-また、別途音源の準備をする必要がなく、WebとSMFを組み合わせた開発がすぐに始められます！
+また、別途音源の準備をする必要がなく、Webと音楽を組み合わせた開発がすぐに始められます！
 
+A JavaScript library for playing MIDI (Standard MIDI File = SMF) on Web. <br>
+You can parse SMF Files and play music using Web Audio API.
+
+Play with 8-bit sound by combining several types of sound sources provided by Web Audio API. <br>
+There is no need to prepare a sound source, and development that combines the Web and Music can be started immediately!
 
 ## 主な機能
 - MIDIファイル(SMF)のパース
 - パースしたデータの再生
-- 再生時のnoteOn/noteOffイベント発火 など
+- 再生時のnoteOn/noteOffイベント受け取り など
 
 
 ## 利用されているプロダクト
@@ -41,7 +46,7 @@ Web Audio API から提供される数種の音源を組み合わせて、8bit�
 ```bash
 $ npm install picoaudio
 ```
-
+https://www.npmjs.com/package/picoaudio
 
 ## はじめ方
 
@@ -263,8 +268,3 @@ PicoAudio.getTiming(time: number): number
 
 ## License
 Code released under the MIT License
-
-
-## Contributors
-- [cagpie](https://github.com/cagpie)
-- [makkii_bcr](https://github.com/makkii-bcr)
