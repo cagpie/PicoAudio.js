@@ -89,8 +89,8 @@ export default function picoAudioConstructor(argsObj) {
     }
 }
 
-function rewriteVar(dist, src, hensu) {
-    if (src && src[hensu] != null && dist && dist[hensu] != null) {
-        dist[hensu] = src[hensu];
+function rewriteVar(dist, src, vr) {
+    if (src && src[vr] != null && dist && dist[vr] != null) {
+        dist[vr] = src[vr];
     }
 }

@@ -1,13 +1,17 @@
 {
-  "name": "pico-audio-js",
-  "version": "1.0.0",
+  "name": "picoaudio",
+  "version": "1.0.1",
   "description": "PicoAudio.js is light MIDI player using Web Audio API",
-  "main": "./dist/nodejs/pico-audio.js",
-  "module": "./dist/nodejs/pico-audio.mjs",
+  "main": "dist/nodejs/picoaudio.js",
+  "module": "dist/nodejs/picoaudio.mjs",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.mjs"
+  ],
   "scripts": {
     "build": "rollup -c",
     "build:map": "rollup -cm",
-    "watch": "rollup -cmw --environment WATCH",
+    "watch": "rollup -mw -c watch.rollup.config.js",
     "lint": "eslint src"
   },
   "repository": {
