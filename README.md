@@ -46,7 +46,7 @@ There is no need to prepare a sound source, and development that combines the We
 ```bash
 $ npm install picoaudio
 ```
-https://www.npmjs.com/package/picoaudio
+https://www.npmjs.com/package/picoaudio (`pico-audio-js` has deprecated)
 
 ## はじめ方
 
