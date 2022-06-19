@@ -19,6 +19,8 @@ export default function parseEvent(info) {
     let firstNoteOnTime = Number_MAX_SAFE_INTEGER;
     let lastNoteOffTiming = 0; // 最後のノートオフのTick
     let lastNoteOffTime = 0;
+    let lastEventTiming = 0; // 最後のEventのTick
+    let lastEventTime = 0;
 
     // Midi Events (0x8n - 0xEn) parse
     for (let ch=0; ch<16; ch++) {
@@ -310,6 +312,12 @@ export default function parseEvent(info) {
                 }
             }
             indIdx = nextIdx;
+
+            // 最後のEventを記録
+            if (tick > lastEventTiming) {
+                lastEventTiming = tick;
+                lastEventTime = time;
+            }
         }
         channel.nowNoteOnIdxAry = nowNoteOnIdxAry;
         if (!this.debug) {
@@ -386,6 +394,8 @@ export default function parseEvent(info) {
     info.firstNoteOnTime = firstNoteOnTime;
     info.lastNoteOffTiming = lastNoteOffTiming;
     info.lastNoteOffTime = lastNoteOffTime;
+    info.lastEventTiming = lastEventTiming;
+    info.lastEventTime = lastEventTime;
     if (this.settings.isWebMIDI) {
         info.messages = messages;
         info.smfData = new Uint8Array(smf); // lastStateを上書きしたsmfをコピー

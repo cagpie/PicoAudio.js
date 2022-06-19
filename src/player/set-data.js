@@ -16,6 +16,8 @@ export default function setData(data) {
     this.lastNoteOffTiming = data.lastNoteOffTiming;
     this.firstNoteOnTime = data.firstNoteOnTime;
     this.lastNoteOffTime = data.lastNoteOffTime;
+    this.lastEventTiming = data.lastEventTiming;
+    this.lastEventTime = data.lastEventTime;
     this.initStatus();
 
     if (this.debug) {
