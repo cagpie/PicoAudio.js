@@ -351,6 +351,7 @@ export default function parseEvent(info) {
         delete channel.nowNoteOnIdxAry;
     }
     if (this.settings.isSkipEnding) songLength = lastNoteOffTiming;
+    if (this.settings.isCC111 && cc111Time != -1) songLength = lastEventTiming;
     tempoTrack.push({ timing:songLength, time:(60 / tempo / header.resolution) * (songLength - tempoCurTick) + tempoCurTime, value:120 });
 
     // WebMIDI用のMIDIメッセージを作成 //
