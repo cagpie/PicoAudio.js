@@ -49,6 +49,8 @@ export default function parseSMF(_smf) {
     data.firstNoteOnTime = info.firstNoteOnTime;
     data.lastNoteOffTiming = info.lastNoteOffTiming;
     data.lastNoteOffTime = info.lastNoteOffTime;
+    data.lastEventTiming = info.lastEventTiming;
+    data.lastEventTime = info.lastEventTime;
     if (this.settings.isWebMIDI) {
         data.messages = info.messages;
         data.smfData = new Uint8Array(smf); // lastStateを上書きしたsmfをコピー
