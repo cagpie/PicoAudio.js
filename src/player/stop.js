@@ -1,5 +1,6 @@
 export default function stop(isSongLooping) {
     const states = this.states;
+    const settings = this.settings;
 
     // 再生していない場合、何もしない //
     if (states.isPlaying == false) return;
@@ -28,7 +29,7 @@ export default function stop(isSongLooping) {
             for (let t=0; t<16; t++) {
                 this.settings.WebMIDIPortOutput.send([0xB0+t, 120, 0]);
             }
-        }, 1000);
+        }, settings.WebMIDIWaitTime);
     }
 
     // 停止をコールバックに通知 //
