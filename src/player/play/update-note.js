@@ -185,9 +185,9 @@ export default class UpdateNote {
                 const curTime = context.currentTime - states.startTime;
 
                 // 終わったノートは演奏せずにスキップ
-                if (curTime > message.time + 1) continue;
+                if (curTime > message.time + settings.WebMIDIWaitTime/1000) continue;
                 // 演奏開始時間 - 先読み時間(ノート予約) になると演奏予約or演奏開始
-                if (curTime < message.time - 1) break;
+                if (curTime < message.time - settings.WebMIDIWaitTime/1000) break;
 
                 // WebMIDIでMIDIメッセージを送信する処理 //
                 const pLen = message.smfPtrLen;

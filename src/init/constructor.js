@@ -17,6 +17,7 @@ export default function picoAudioConstructor(argsObj) {
         basePitch: 440,
         resolution: 480,
         isWebMIDI: false,
+        WebMIDIWaitTime: 1000, // MIDIデバイスの待機時間 (ブラウザ画面がBG時callbackが1秒毎になるため、BG時でもちゃんと鳴らしたい場合は1秒にする)
         WebMIDIPortOutputs: null,
         WebMIDIPortOutput: null,
         WebMIDIPort: -1, // -1:auto

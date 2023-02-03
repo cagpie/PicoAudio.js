@@ -20,8 +20,8 @@ export default function play(isSongLooping) {
             if (states.webMIDIWaitState != "waiting") { // play()連打の対策
                 // stop()から1000ms後にplay()を実行
                 states.webMIDIWaitState = "waiting";
-                let waitTime = 1000 - (context.currentTime - states.webMIDIStopTime)*1000;
-                if (states.webMIDIStopTime == 0) waitTime = 1000; // MIDI Portをopenして最初に呼び出すときも少し待つ
+                let waitTime = settings.WebMIDIWaitTime - (context.currentTime - states.webMIDIStopTime)*1000;
+                if (states.webMIDIStopTime == 0) waitTime = settings.WebMIDIWaitTime; // MIDI Portをopenして最初に呼び出すときも少し待つ
                 setTimeout(() => {
                     states.webMIDIWaitState = "completed";
                     states.isPlaying = false;
